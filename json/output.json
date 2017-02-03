@@ -1,0 +1,15 @@
+{
+    "backend": {
+        "type": "hadoop",
+        "path": "file:///tmp/hdfs-catalog/"
+    },
+    "reprojectMethod": "buffered",
+    "pyramid": false,
+    "tileSize": 512,
+    "keyIndexMethod": {
+        "type": "zorder"
+    },
+    "resampleMethod": "nearest-neighbor",
+    "layoutScheme": "floating",
+    "crs": "EPSG:3857"
+}
