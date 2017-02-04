@@ -25,6 +25,7 @@ $SPARK_HOME/bin/spark-submit \
    --input "file:///tmp/input.json" \
    --output "file:///tmp/output.json" \
    --backend-profiles "file:///tmp/backend-profiles.json"
+```
 
 # Run #
 
