@@ -41,6 +41,8 @@ object CostDistance {
     * Main
     */
   def main(args: Array[String]) : Unit = {
+    val maxCost = if (args.length > 0) args(0).toDouble; else 144000.0
+
     // Establish Spark Context
     val sparkConf = (new SparkConf()).setAppName("Cost-Distance")
     val sparkContext = new SparkContext(sparkConf)
@@ -60,7 +62,7 @@ object CostDistance {
 
     // Cost
     val before = System.currentTimeMillis
-    val cost = ContextRDD(MrGeoCostDistance(friction, points, 200000), friction.metadata)
+    val cost = ContextRDD(MrGeoCostDistance(friction, points, maxCost), friction.metadata)
     val after = System.currentTimeMillis
 
     // Dump tiles to disk
