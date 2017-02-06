@@ -41,30 +41,32 @@ object CostDistance {
     * Main
     */
   def main(args: Array[String]) : Unit = {
-    /* Spark context */
+    // Establish Spark Context
     val sparkConf = (new SparkConf()).setAppName("Cost-Distance")
     val sparkContext = new SparkContext(sparkConf)
     implicit val sc = sparkContext
 
-    /* Friction */
+    // Get friction tiles
     val id = LayerId("friction", 0)
     val friction =
       HadoopLayerReader("file:///tmp/hdfs-catalog/")
         .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](id)
 
-    /* Starting Points */
+    // Get starting points
     val points: List[Point] =
       ShapeFileReader
         .readSimpleFeatures("/tmp/cost-distance/points/points.shp")
         .map({ sf => sf.toGeometry[Point] })
 
-    /* Cost */
+    // Cost
     val before = System.currentTimeMillis
-    val cost = ContextRDD(MrGeoCostDistance(friction, points), friction.metadata)
-    dump(cost, "cost")
+    val cost = ContextRDD(MrGeoCostDistance(friction, points, 200000), friction.metadata)
     val after = System.currentTimeMillis
 
-    /* Report Timing */
+    // Dump tiles to disk
+    dump(cost, "cost")
+
+    // Report Timing
     logger.info(s"MILLIS: ${after - before}")
   }
 
