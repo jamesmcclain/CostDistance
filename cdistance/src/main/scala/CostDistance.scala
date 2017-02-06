@@ -62,7 +62,7 @@ object CostDistance {
 
     // Cost
     val before = System.currentTimeMillis
-    val cost = ContextRDD(MrGeoCostDistance(friction, points, maxCost), friction.metadata)
+    val cost = ContextRDD(IterativeCostDistance(friction, points, maxCost), friction.metadata)
     val after = System.currentTimeMillis
 
     // Dump tiles to disk
