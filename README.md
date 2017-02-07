@@ -29,9 +29,23 @@ $SPARK_HOME/bin/spark-submit \
 
 # Run #
 
+### Locally ###
+
 ```bash
 $SPARK_HOME/bin/spark-submit \
-   --master 'local[*]' \
-   --driver-memory 16G \
-   cdistance/target/scala-2.11/cdistance-assembly-0.jar
+   --master 'local[*]' --driver-memory 16G \
+   cdistance/target/scala-2.11/cdistance-assembly-0.jar \
+   'file:///tmp/catalog' /tmp/cost-distance/points/points.shp dump 200000
+```
+
+### On EMR ###
+
+```bash
+spark-submit --master yarn \
+   cdistance-assembly-0.jar \
+   'hdfs:/catalog' /tmp/cost-distance/points/points.shp cost 200000
+```
+then
+```bash
+spark-submit --master local --driver-memory 4G cdistance-assembly-0.jar 'hdfs:/catalog' cost dump-only
 ```

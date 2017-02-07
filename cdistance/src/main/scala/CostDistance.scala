@@ -9,6 +9,7 @@ import geotrellis.spark._
 import geotrellis.spark.costdistance._
 import geotrellis.spark.io._
 import geotrellis.spark.io.hadoop._
+import geotrellis.spark.io.index._
 import geotrellis.vector._
 
 import org.apache.log4j.Logger
@@ -41,35 +42,49 @@ object CostDistance {
     * Main
     */
   def main(args: Array[String]) : Unit = {
-    val maxCost = if (args.length > 0) args(0).toDouble; else 144000.0
+    val catalog = args(0)
+    val shapeFile = args(1)
+    val save: Option[String] = if (args.length > 2) Some(args(2)); else None
+    val maxCost = if (args.length > 3) args(3).toDouble; else 144000.0
 
     // Establish Spark Context
     val sparkConf = (new SparkConf()).setAppName("Cost-Distance")
     val sparkContext = new SparkContext(sparkConf)
     implicit val sc = sparkContext
 
-    // Get friction tiles
-    val id = LayerId("friction", 0)
-    val friction =
-      HadoopLayerReader("file:///tmp/hdfs-catalog/")
-        .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](id)
+    if (save != Some("dump-only")) {
+      // Get friction tiles
+      val id = LayerId("friction", 0)
+      val friction =
+        HadoopLayerReader(catalog)
+          .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](id)
 
-    // Get starting points
-    val points: List[Point] =
-      ShapeFileReader
-        .readSimpleFeatures("/tmp/cost-distance/points/points.shp")
-        .map({ sf => sf.toGeometry[Point] })
+      // Get starting points
+      val points: List[Point] =
+        ShapeFileReader
+          .readSimpleFeatures(shapeFile)
+          .map({ sf => sf.toGeometry[Point] })
 
-    // Cost
-    val before = System.currentTimeMillis
-    val cost = ContextRDD(IterativeCostDistance(friction, points, maxCost), friction.metadata)
-    val after = System.currentTimeMillis
+      // Cost
+      val before = System.currentTimeMillis
+      val cost = ContextRDD(IterativeCostDistance(friction, points, maxCost), friction.metadata)
+      val after = System.currentTimeMillis
 
-    // Dump tiles to disk
-    dump(cost, "cost")
+      // Report Timing
+      logger.info(s"MILLIS: ${after - before}")
 
-    // Report Timing
-    logger.info(s"MILLIS: ${after - before}")
+      save match {
+        case Some("dump") => dump(cost, "cost")
+        case Some(layerName) => HadoopLayerWriter(catalog).write(LayerId(layerName, 0), cost, ZCurveKeyIndexMethod)
+        case None =>
+      }
+    }
+    else {
+      val layerName = args(1)
+      val cost =
+        HadoopLayerReader(catalog)
+          .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](LayerId(layerName, 0))
+      dump(cost, layerName)
+    }
   }
-
 }
