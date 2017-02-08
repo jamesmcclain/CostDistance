@@ -35,7 +35,7 @@ $SPARK_HOME/bin/spark-submit \
 $SPARK_HOME/bin/spark-submit \
    --master 'local[*]' --driver-memory 16G \
    cdistance/target/scala-2.11/cdistance-assembly-0.jar \
-   'file:///tmp/catalog' /tmp/cost-distance/points/points.shp dump 200000
+   'file:///tmp/catalog' dump friction 0 /tmp/cost-distance/points/points.shp 200000
 ```
 
 ### On EMR ###
@@ -43,9 +43,11 @@ $SPARK_HOME/bin/spark-submit \
 ```bash
 spark-submit --master yarn \
    cdistance-assembly-0.jar \
-   'hdfs:/catalog' /tmp/cost-distance/points/points.shp cost 200000
+   'hdfs:/catalog' cost friction 0 /tmp/cost-distance/points/points.shp 200000
 ```
 then
 ```bash
-spark-submit --master local --driver-memory 4G cdistance-assembly-0.jar 'hdfs:/catalog' cost dump-only
+spark-submit --master local --driver-memory 4G \
+   cdistance-assembly-0.jar \
+   'hdfs:/catalog' dump-only cost 0
 ```
