@@ -29,7 +29,7 @@ object CostDistance {
   def dump(rdd: RDD[(SpatialKey, Tile)] with Metadata[TileLayerMetadata[SpatialKey]], stem: String) = {
     val mt = rdd.metadata.mapTransform
 
-    rdd.collect.foreach({ case (k, v) =>
+    rdd.foreach({ case (k, v) =>
       val extent = mt(k)
       val pr = ProjectedRaster(Raster(v, extent), WebMercator)
       val gc = pr.toGridCoverage2D
@@ -43,18 +43,23 @@ object CostDistance {
     */
   def main(args: Array[String]) : Unit = {
     val catalog = args(0)
-    val shapeFile = args(1)
-    val save: Option[String] = if (args.length > 2) Some(args(2)); else None
-    val maxCost = if (args.length > 3) args(3).toDouble; else 144000.0
+    val save = args(1)
 
     // Establish Spark Context
     val sparkConf = (new SparkConf()).setAppName("Cost-Distance")
     val sparkContext = new SparkContext(sparkConf)
     implicit val sc = sparkContext
 
-    if (save != Some("dump-only")) {
+    if (save != "dump-only") {
+      val frictionLayerName = args(2)
+      val zoom = args(3).toInt
+      val shapeFile = args(4)
+      val maxCost = args(5).toDouble
+
+      logger.debug(s"catalog=$catalog frictionLayer=($frictionLayerName, $zoom) shapeFile=$shapeFile maxCost=$maxCost")
+
       // Get friction tiles
-      val id = LayerId("friction", 0)
+      val id = LayerId(frictionLayerName, zoom)
       val friction =
         HadoopLayerReader(catalog)
           .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](id)
@@ -71,20 +76,28 @@ object CostDistance {
       val after = System.currentTimeMillis
 
       // Report Timing
-      logger.info(s"MILLIS: ${after - before}")
+      logger.info(s"${after - before} milliseconds")
 
-      save match {
-        case Some("dump") => dump(cost, "cost")
-        case Some(layerName) => HadoopLayerWriter(catalog).write(LayerId(layerName, 0), cost, ZCurveKeyIndexMethod)
-        case None =>
+      // Write results
+      if (save == "dump") {
+        logger.debug(s"Dumping to disk")
+        dump(cost, "cost")
+      }
+      else {
+        val id = LayerId(save, zoom)
+        logger.debug(s"Writing to $catalog $id")
+        HadoopLayerWriter(catalog).write(id, cost, ZCurveKeyIndexMethod)
       }
     }
-    else {
-      val layerName = args(1)
+    else if (save == "dump-only") {
+      val costLayerName = args(2)
+      val zoom = args(3).toInt
+      val id = LayerId(costLayerName, zoom)
       val cost =
         HadoopLayerReader(catalog)
-          .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](LayerId(layerName, 0))
-      dump(cost, layerName)
+          .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](id)
+
+      dump(cost, costLayerName)
     }
   }
 }
