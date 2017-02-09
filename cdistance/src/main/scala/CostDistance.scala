@@ -29,7 +29,7 @@ object CostDistance {
   def dump(rdd: RDD[(SpatialKey, Tile)] with Metadata[TileLayerMetadata[SpatialKey]], stem: String) = {
     val mt = rdd.metadata.mapTransform
 
-    rdd.collect.foreach({ case (k, v) =>
+    rdd.foreach({ case (k, v) =>
       val extent = mt(k)
       val pr = ProjectedRaster(Raster(v, extent), WebMercator)
       val gc = pr.toGridCoverage2D

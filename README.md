@@ -47,7 +47,7 @@ spark-submit --master yarn \
 ```
 then
 ```bash
-spark-submit --master local --driver-memory 4G \
+spark-submit --master 'local[1]' --driver-memory 4G \
    cdistance-assembly-0.jar \
    'hdfs:/catalog' dump-only cost 0
 ```
