@@ -50,19 +50,18 @@ object CostDistance {
     val sparkContext = new SparkContext(sparkConf)
     implicit val sc = sparkContext
 
-    if (save != "dump-only") {
+    if (save != "dump") {
       val frictionLayerName = args(2)
       val zoom = args(3).toInt
       val shapeFile = args(4)
       val maxCost = args(5).toDouble
-
-      logger.debug(s"catalog=$catalog frictionLayer=($frictionLayerName, $zoom) shapeFile=$shapeFile maxCost=$maxCost")
+      val rid = LayerId(frictionLayerName, zoom)
+      logger.debug(s"catalog=$catalog frictionLayer=$rid shapeFile=$shapeFile maxCost=$maxCost")
 
       // Get friction tiles
-      val id = LayerId(frictionLayerName, zoom)
       val friction =
         HadoopLayerReader(catalog)
-          .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](id)
+          .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](rid)
 
       // Get starting points
       val points: List[Point] =
@@ -75,21 +74,15 @@ object CostDistance {
       val cost = ContextRDD(IterativeCostDistance(friction, points, maxCost), friction.metadata)
       val after = System.currentTimeMillis
 
-      // Report Timing
+      // Report timing
       logger.info(s"${after - before} milliseconds")
 
       // Write results
-      if (save == "dump") {
-        logger.debug(s"Dumping to disk")
-        dump(cost, "cost")
-      }
-      else {
-        val id = LayerId(save, zoom)
-        logger.debug(s"Writing to $catalog $id")
-        HadoopLayerWriter(catalog).write(id, cost, ZCurveKeyIndexMethod)
-      }
+      val wid = LayerId(save, zoom)
+      logger.info(s"Writing to $catalog $wid")
+      HadoopLayerWriter(catalog).write(wid, cost, ZCurveKeyIndexMethod)
     }
-    else if (save == "dump-only") {
+    else if (save == "dump") {
       val costLayerName = args(2)
       val zoom = args(3).toInt
       val id = LayerId(costLayerName, zoom)
