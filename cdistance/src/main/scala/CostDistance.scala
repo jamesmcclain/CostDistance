@@ -46,7 +46,10 @@ object CostDistance {
     val save = args(1)
 
     // Establish Spark Context
-    val sparkConf = (new SparkConf()).setAppName("Cost-Distance")
+    val sparkConf = (new SparkConf())
+      .setAppName("Cost-Distance")
+      .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+      .set("spark.kryo.registrator", "geotrellis.spark.io.kryo.KryoRegistrator")
     val sparkContext = new SparkContext(sparkConf)
     implicit val sc = sparkContext
 
