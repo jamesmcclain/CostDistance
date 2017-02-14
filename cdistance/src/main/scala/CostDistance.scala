@@ -43,57 +43,76 @@ object CostDistance {
     */
   def main(args: Array[String]) : Unit = {
     val catalog = args(0)
-    val save = args(1)
+    val operation = args(1)
 
     // Establish Spark Context
     val sparkConf = (new SparkConf())
       .setAppName("Cost-Distance")
       .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
       .set("spark.kryo.registrator", "geotrellis.spark.io.kryo.KryoRegistrator")
+      .set("spark.rdd.compress", "true")
     val sparkContext = new SparkContext(sparkConf)
     implicit val sc = sparkContext
 
-    if (save != "dump") {
-      val frictionLayerName = args(2)
-      val zoom = args(3).toInt
-      val shapeFile = args(4)
-      val maxCost = args(5).toDouble
-      val rid = LayerId(frictionLayerName, zoom)
-      logger.debug(s"catalog=$catalog frictionLayer=$rid shapeFile=$shapeFile maxCost=$maxCost")
+    if (operation == "slope") {
+      val zoom = args(4).toInt
+      val readId = LayerId(args(2), zoom)
+      val writeId = LayerId(args(3), zoom)
 
-      // Get friction tiles
+      logger.debug(s"Slope: catalog=$catalog input=$readId output=$writeId")
+
+      val elevation =
+        HadoopLayerReader(catalog)
+          .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](readId)
+      val slope = elevation.slope()
+
+      HadoopLayerWriter(catalog).write(writeId, slope, ZCurveKeyIndexMethod)
+    }
+    else if (operation == "costdistance") {
+      val zoom = args(4).toInt
+      val readId = LayerId(args(2), zoom)
+      val writeId = LayerId(args(3), zoom)
+      val shapeFile = args(5)
+      val maxCost = args(6).toDouble
+
+      logger.debug(s"Cost-Distance: catalog=$catalog input=$readId output=$writeId shapeFile=$shapeFile maxCost=$maxCost")
+
+      // Read friction layer
       val friction =
         HadoopLayerReader(catalog)
-          .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](rid)
+          .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](readId)
 
-      // Get starting points
+      // Read starting points
       val points: List[Point] =
         ShapeFileReader
           .readSimpleFeatures(shapeFile)
           .map({ sf => sf.toGeometry[Point] })
 
-      // Cost
+      // Compute cost layer
       val before = System.currentTimeMillis
-      val cost = ContextRDD(IterativeCostDistance(friction, points, maxCost), friction.metadata)
+      val cost = {
+        val _md = friction.metadata
+        val md = TileLayerMetadata(DoubleCellType, _md.layout, _md.extent, _md.crs, _md.bounds)
+        ContextRDD(IterativeCostDistance(friction, points, maxCost), md)
+      }
       val after = System.currentTimeMillis
 
-      // Report timing
       logger.info(s"${after - before} milliseconds")
-
-      // Write results
-      val wid = LayerId(save, zoom)
-      logger.info(s"Writing to $catalog $wid")
-      HadoopLayerWriter(catalog).write(wid, cost, ZCurveKeyIndexMethod)
+      logger.info(s"Writing to $catalog $writeId")
+      HadoopLayerWriter(catalog).write(writeId, cost, ZCurveKeyIndexMethod)
     }
-    else if (save == "dump") {
-      val costLayerName = args(2)
-      val zoom = args(3).toInt
-      val id = LayerId(costLayerName, zoom)
-      val cost =
+    else if (operation == "dump") {
+      val layerName = args(2)
+      val id = LayerId(layerName, args(3).toInt)
+      val layer =
         HadoopLayerReader(catalog)
           .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](id)
 
-      dump(cost, costLayerName)
+      logger.debug(s"Dump: catalog=$catalog input=$id output=/tmp/tif/${layerName}-*.tif")
+
+      dump(layer, layerName)
     }
+
+    sparkContext.stop
   }
 }
