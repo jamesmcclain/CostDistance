@@ -50,6 +50,7 @@ object CostDistance {
       .setAppName("Cost-Distance")
       .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
       .set("spark.kryo.registrator", "geotrellis.spark.io.kryo.KryoRegistrator")
+      .set("spark.rdd.compress", "true")
     val sparkContext = new SparkContext(sparkConf)
     implicit val sc = sparkContext
 
@@ -111,5 +112,7 @@ object CostDistance {
 
       dump(layer, layerName)
     }
+
+    sparkContext.stop
   }
 }
