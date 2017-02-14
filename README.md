@@ -41,13 +41,20 @@ $SPARK_HOME/bin/spark-submit \
 ### On EMR ###
 
 ```bash
-spark-submit --master yarn \
+spark-submit \
+   --master yarn \
+   --driver-memory 12G \
+   --conf "spark.yarn.executor.memoryOverhead=6G" \
+   --conf spark.rdd.compress=true \
+   --conf "spark.driver.extraJavaOptions=-XX:+UseConcMarkSweepGC -XX:CMSInitiatingOccupancyFraction=70 -XX:MaxHeapFreeRatio=70 -XX:+CMSClassUnloadingEnabled -XX:OnOutOfMemoryError='kill -9 %p' -Dlog4j.configuration=file:///home/hadoop/log4j.properties" \
    cdistance-assembly-0.jar \
    'hdfs:/catalog' costdistance friction cost 0 /tmp/cost-distance/points/points.shp 200000
 ```
 then
 ```bash
-spark-submit --master 'local[1]' --driver-memory 4G \
+spark-submit \
+   --master 'local' \
+   --conf "spark.driver.extraJavaOptions=-XX:+UseConcMarkSweepGC -XX:CMSInitiatingOccupancyFraction=70 -XX:MaxHeapFreeRatio=70 -XX:+CMSClassUnloadingEnabled -XX:OnOutOfMemoryError='kill -9 %p' -Dlog4j.configuration=file:///home/hadoop/log4j.properties" \
    cdistance-assembly-0.jar \
    'hdfs:/catalog' dump cost 0
 ```
