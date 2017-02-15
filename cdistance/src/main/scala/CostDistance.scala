@@ -10,6 +10,8 @@ import geotrellis.spark.costdistance._
 import geotrellis.spark.io._
 import geotrellis.spark.io.hadoop._
 import geotrellis.spark.io.index._
+import geotrellis.spark.pyramid.Pyramid
+import geotrellis.spark.tiling.ZoomedLayoutScheme
 import geotrellis.vector._
 
 import org.apache.log4j.Logger
@@ -54,7 +56,26 @@ object CostDistance {
     val sparkContext = new SparkContext(sparkConf)
     implicit val sc = sparkContext
 
-    if (operation == "slope") {
+    // PYRAMID
+    if (operation == "pyramid") {
+      val inputZoom = args(3).toInt
+      val outputLayerName = args(4)
+      val readId = LayerId(args(2), inputZoom)
+      val src =
+        HadoopLayerReader(catalog)
+          .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](readId)
+      val layoutScheme = ZoomedLayoutScheme(WebMercator, 512)
+
+      logger.debug(s"Pyramid: catalog=$catalog input=$readId")
+      Pyramid.upLevels(src, layoutScheme, 12, 1)({ (rdd, outputZoom) =>
+        val writeId = LayerId(outputLayerName, outputZoom)
+
+        logger.info(s"Writing to $catalog $writeId")
+        HadoopLayerWriter(catalog).write(writeId, rdd, ZCurveKeyIndexMethod)
+      })
+    }
+    // SLOPE
+    else if (operation == "slope") {
       val zoom = args(4).toInt
       val readId = LayerId(args(2), zoom)
       val writeId = LayerId(args(3), zoom)
@@ -66,8 +87,10 @@ object CostDistance {
           .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](readId)
       val slope = elevation.slope()
 
+      logger.info(s"Writing to $catalog $writeId")
       HadoopLayerWriter(catalog).write(writeId, slope, ZCurveKeyIndexMethod)
     }
+    // COST-DISTANCE
     else if (operation == "costdistance") {
       val zoom = args(4).toInt
       val readId = LayerId(args(2), zoom)
@@ -101,6 +124,7 @@ object CostDistance {
       logger.info(s"Writing to $catalog $writeId")
       HadoopLayerWriter(catalog).write(writeId, cost, ZCurveKeyIndexMethod)
     }
+    // DUMP
     else if (operation == "dump") {
       val layerName = args(2)
       val id = LayerId(layerName, args(3).toInt)
@@ -109,7 +133,6 @@ object CostDistance {
           .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](id)
 
       logger.debug(s"Dump: catalog=$catalog input=$id output=/tmp/tif/${layerName}-*.tif")
-
       dump(layer, layerName)
     }
 
