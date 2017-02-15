@@ -10,6 +10,6 @@
         "type": "zorder"
     },
     "resampleMethod": "nearest-neighbor",
-    "layoutScheme": "floating",
+    "layoutScheme": "zoomed",
     "crs": "EPSG:3857"
 }
