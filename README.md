@@ -31,15 +31,34 @@ $SPARK_HOME/bin/spark-submit \
 
 ### Locally ###
 
+Compute the `slope` layer to use as the friction layer:
+```bash
+$SPARK_HOME/bin/spark-submit \
+   --master 'local[*]' \
+   --driver-memory 16G \
+   cdistance/target/scala-2.11/cdistance-assembly-0.jar \
+   'file:///tmp/hdfs-catalog' slope ned slope <z>
+```
+
+Compute the `cost` layer:
 ```bash
 $SPARK_HOME/bin/spark-submit \
    --master 'local[*]' --driver-memory 16G \
    cdistance/target/scala-2.11/cdistance-assembly-0.jar \
-   'file:///tmp/hdfs-catalog' costdistance friction cost 0 /tmp/cost-distance/points/points.shp 200000
+   'file:///tmp/hdfs-catalog' costdistance slope cost <z> /tmp/cities-3857/cities-3857.shp 20000
+```
+
+Pyramid the `cost` layer into `cost-pyramid`:
+```bash
+$SPARK_HOME/bin/spark-submit \
+   --master 'local[*]' --driver-memory 16G \
+   cdistance/target/scala-2.11/cdistance-assembly-0.jar \
+   'file:///tmp/hdfs-catalog' pyramid cost <z> cost-pyramid
 ```
 
 ### On EMR ###
 
+On EMR, the `cost` layer can be computed in the following way:
 ```bash
 spark-submit \
    --master yarn \
@@ -49,12 +68,4 @@ spark-submit \
    --conf "spark.driver.extraJavaOptions=-XX:+UseConcMarkSweepGC -XX:CMSInitiatingOccupancyFraction=70 -XX:MaxHeapFreeRatio=70 -XX:+CMSClassUnloadingEnabled -XX:OnOutOfMemoryError='kill -9 %p' -Dlog4j.configuration=file:///home/hadoop/log4j.properties" \
    cdistance-assembly-0.jar \
    'hdfs:/catalog' costdistance friction cost 0 /tmp/cost-distance/points/points.shp 200000
-```
-then
-```bash
-spark-submit \
-   --master 'local' \
-   --conf "spark.driver.extraJavaOptions=-XX:+UseConcMarkSweepGC -XX:CMSInitiatingOccupancyFraction=70 -XX:MaxHeapFreeRatio=70 -XX:+CMSClassUnloadingEnabled -XX:OnOutOfMemoryError='kill -9 %p' -Dlog4j.configuration=file:///home/hadoop/log4j.properties" \
-   cdistance-assembly-0.jar \
-   'hdfs:/catalog' dump cost 0
 ```
