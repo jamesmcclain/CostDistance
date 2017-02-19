@@ -4,6 +4,7 @@ import geotrellis.geotools._
 import geotrellis.proj4.WebMercator
 import geotrellis.raster._
 import geotrellis.raster.costdistance._
+import geotrellis.raster.io._
 import geotrellis.shapefile._
 import geotrellis.spark._
 import geotrellis.spark.costdistance._
@@ -131,9 +132,20 @@ object CostDistance {
       logger.debug(s"Dump: catalog=$catalog input=$id output=/tmp/tif/${layerName}-*.tif")
       dump(layer, layerName)
     }
+    // HISTOGRAM
+    else if (operation == "histogram") {
+      val layerName = args(2)
+      val id = LayerId(layerName, args(3).toInt)
+      val attributeStore = HadoopAttributeStore(catalog)
+      val layer =
+        HadoopLayerReader(catalog)
+          .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](id)
+
+      logger.debug(s"Histogram: catalog=$catalog input=$id")
+      attributeStore.write(id, "histogram", layer.histogram())
+    }
     // ANY OTHER COMMAND
-    else
-      logger.debug(s"Unknown Operaton: $operation")
+    else logger.debug(s"Unknown Operaton: $operation")
 
     sparkContext.stop
   }
