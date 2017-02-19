@@ -61,13 +61,14 @@ object CostDistance {
     if (operation == "pyramid") {
       val inputZoom = args(3).toInt
       val outputLayerName = args(4)
+      val size = args(5).toInt
       val readId = LayerId(args(2), inputZoom)
       val src =
         HadoopLayerReader(catalog)
           .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](readId)
-      val layoutScheme = ZoomedLayoutScheme(WebMercator, 512)
+      val layoutScheme = ZoomedLayoutScheme(WebMercator, size)
 
-      logger.debug(s"Pyramid: catalog=$catalog input=$readId")
+      logger.debug(s"Pyramid: catalog=$catalog input=$readId ${size}×${size} tiles")
       Pyramid.upLevels(src, layoutScheme, 12, 1)({ (rdd, outputZoom) =>
         val writeId = LayerId(outputLayerName, outputZoom)
 

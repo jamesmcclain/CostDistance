@@ -49,18 +49,32 @@ $SPARK_HOME/bin/spark-submit \
    'file:///tmp/hdfs-catalog' costdistance slope cost <z> /tmp/cities-3857/cities-3857.shp 20000
 ```
 
+Compute the histogram of the `cost` layer:
+```bash
+$SPARK_HOME/bin/spark-submit \
+   --master 'local[*]' \
+   --driver-memory 16G \
+   cdistance/target/scala-2.11/cdistance-assembly-0.jar \
+   'file:///tmp/hdfs-catalog' histogram cost <z>
+```
+
 Pyramid the `cost` layer into `cost-pyramid`:
 ```bash
 $SPARK_HOME/bin/spark-submit \
    --master 'local[*]' \
    --driver-memory 16G \
    cdistance/target/scala-2.11/cdistance-assembly-0.jar \
-   'file:///tmp/hdfs-catalog' pyramid cost <z> cost-pyramid
+   'file:///tmp/hdfs-catalog' pyramid cost <z> cost-pyramid 256
+```
+
+Start the TMS server:
+```bash
+$SPARK_HOME/bin/spark-submit server/target/scala-2.11/server-assembly-0.jar
 ```
 
 ### On EMR ###
 
-On EMR, the `cost` layer can be computed in the following way:
+On EMR, the `cost` layer can be computed in something like the following way:
 ```bash
 spark-submit \
    --master yarn \
