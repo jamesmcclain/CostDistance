@@ -43,7 +43,8 @@ $SPARK_HOME/bin/spark-submit \
 Compute the `cost` layer:
 ```bash
 $SPARK_HOME/bin/spark-submit \
-   --master 'local[*]' --driver-memory 16G \
+   --master 'local[*]' \
+   --driver-memory 16G \
    cdistance/target/scala-2.11/cdistance-assembly-0.jar \
    'file:///tmp/hdfs-catalog' costdistance slope cost <z> /tmp/cities-3857/cities-3857.shp 20000
 ```
@@ -51,7 +52,8 @@ $SPARK_HOME/bin/spark-submit \
 Pyramid the `cost` layer into `cost-pyramid`:
 ```bash
 $SPARK_HOME/bin/spark-submit \
-   --master 'local[*]' --driver-memory 16G \
+   --master 'local[*]' \
+   --driver-memory 16G \
    cdistance/target/scala-2.11/cdistance-assembly-0.jar \
    'file:///tmp/hdfs-catalog' pyramid cost <z> cost-pyramid
 ```
