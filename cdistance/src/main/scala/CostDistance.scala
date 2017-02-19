@@ -69,7 +69,7 @@ object CostDistance {
       val layoutScheme = ZoomedLayoutScheme(WebMercator, size)
 
       logger.debug(s"Pyramid: catalog=$catalog input=$readId ${size}×${size} tiles")
-      Pyramid.upLevels(src, layoutScheme, 12, 1)({ (rdd, outputZoom) =>
+      Pyramid.upLevels(src, layoutScheme, inputZoom, 1)({ (rdd, outputZoom) =>
         val writeId = LayerId(outputLayerName, outputZoom)
 
         logger.info(s"Writing to $catalog $writeId")
