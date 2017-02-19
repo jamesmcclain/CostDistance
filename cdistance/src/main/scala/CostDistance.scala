@@ -56,7 +56,7 @@ object CostDistance {
     val sparkContext = new SparkContext(sparkConf)
     implicit val sc = sparkContext
 
-    // PYRAMID
+    // PYRAMID COMMAND
     if (operation == "pyramid") {
       val inputZoom = args(3).toInt
       val outputLayerName = args(4)
@@ -74,7 +74,7 @@ object CostDistance {
         HadoopLayerWriter(catalog).write(writeId, rdd, ZCurveKeyIndexMethod)
       })
     }
-    // SLOPE
+    // SLOPE COMMAND
     else if (operation == "slope") {
       val zoom = args(4).toInt
       val readId = LayerId(args(2), zoom)
@@ -90,7 +90,7 @@ object CostDistance {
       logger.info(s"Writing to $catalog $writeId")
       HadoopLayerWriter(catalog).write(writeId, slope, ZCurveKeyIndexMethod)
     }
-    // COST-DISTANCE
+    // COST-DISTANCE COMMAND
     else if (operation == "costdistance") {
       val zoom = args(4).toInt
       val readId = LayerId(args(2), zoom)
@@ -113,18 +113,14 @@ object CostDistance {
 
       // Compute cost layer
       val before = System.currentTimeMillis
-      val cost = {
-        val _md = friction.metadata
-        val md = TileLayerMetadata(DoubleCellType, _md.layout, _md.extent, _md.crs, _md.bounds)
-        ContextRDD(IterativeCostDistance(friction, points, maxCost), md)
-      }
+      val cost = friction.costdistance(points, maxCost)
       val after = System.currentTimeMillis
 
       logger.info(s"${after - before} milliseconds")
       logger.info(s"Writing to $catalog $writeId")
       HadoopLayerWriter(catalog).write(writeId, cost, ZCurveKeyIndexMethod)
     }
-    // DUMP
+    // DUMP COMMAND
     else if (operation == "dump") {
       val layerName = args(2)
       val id = LayerId(layerName, args(3).toInt)
@@ -135,6 +131,9 @@ object CostDistance {
       logger.debug(s"Dump: catalog=$catalog input=$id output=/tmp/tif/${layerName}-*.tif")
       dump(layer, layerName)
     }
+    // ANY OTHER COMMAND
+    else
+      logger.debug(s"Unknown Operaton: $operation")
 
     sparkContext.stop
   }
