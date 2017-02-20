@@ -60,3 +60,7 @@ lazy val cdistance = (project in file("cdistance"))
   .dependsOn(root)
   .settings(commonSettings: _*)
   .settings(resolvers ++= extraResolvers)
+
+lazy val server = (project in file("server"))
+  .dependsOn(root)
+  .settings(commonSettings: _*)

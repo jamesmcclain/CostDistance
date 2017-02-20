@@ -1,9 +1,9 @@
 [{
     "format": "geotiff",
-    "name": "friction",
+    "name": "ned",
     "cache": "NONE",
     "backend": {
         "type": "hadoop",
-        "path": "file:///tmp/cost-distance/friction.tif"
+        "path": "file:///tmp/NED"
     }
 }]

@@ -5,7 +5,7 @@
     },
     "reprojectMethod": "buffered",
     "pyramid": false,
-    "tileSize": 512,
+    "tileSize": 256,
     "keyIndexMethod": {
         "type": "zorder"
     },

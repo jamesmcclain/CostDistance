@@ -4,6 +4,7 @@ import geotrellis.geotools._
 import geotrellis.proj4.WebMercator
 import geotrellis.raster._
 import geotrellis.raster.costdistance._
+import geotrellis.raster.io._
 import geotrellis.shapefile._
 import geotrellis.spark._
 import geotrellis.spark.costdistance._
@@ -56,25 +57,26 @@ object CostDistance {
     val sparkContext = new SparkContext(sparkConf)
     implicit val sc = sparkContext
 
-    // PYRAMID
+    // PYRAMID COMMAND
     if (operation == "pyramid") {
       val inputZoom = args(3).toInt
       val outputLayerName = args(4)
+      val size = args(5).toInt
       val readId = LayerId(args(2), inputZoom)
       val src =
         HadoopLayerReader(catalog)
           .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](readId)
-      val layoutScheme = ZoomedLayoutScheme(WebMercator, 512)
+      val layoutScheme = ZoomedLayoutScheme(WebMercator, size)
 
-      logger.debug(s"Pyramid: catalog=$catalog input=$readId")
-      Pyramid.upLevels(src, layoutScheme, 12, 1)({ (rdd, outputZoom) =>
+      logger.debug(s"Pyramid: catalog=$catalog input=$readId ${size}×${size} tiles")
+      Pyramid.upLevels(src, layoutScheme, inputZoom, 1)({ (rdd, outputZoom) =>
         val writeId = LayerId(outputLayerName, outputZoom)
 
         logger.info(s"Writing to $catalog $writeId")
         HadoopLayerWriter(catalog).write(writeId, rdd, ZCurveKeyIndexMethod)
       })
     }
-    // SLOPE
+    // SLOPE COMMAND
     else if (operation == "slope") {
       val zoom = args(4).toInt
       val readId = LayerId(args(2), zoom)
@@ -90,7 +92,7 @@ object CostDistance {
       logger.info(s"Writing to $catalog $writeId")
       HadoopLayerWriter(catalog).write(writeId, slope, ZCurveKeyIndexMethod)
     }
-    // COST-DISTANCE
+    // COST-DISTANCE COMMAND
     else if (operation == "costdistance") {
       val zoom = args(4).toInt
       val readId = LayerId(args(2), zoom)
@@ -113,18 +115,14 @@ object CostDistance {
 
       // Compute cost layer
       val before = System.currentTimeMillis
-      val cost = {
-        val _md = friction.metadata
-        val md = TileLayerMetadata(DoubleCellType, _md.layout, _md.extent, _md.crs, _md.bounds)
-        ContextRDD(IterativeCostDistance(friction, points, maxCost), md)
-      }
+      val cost = friction.costdistance(points, maxCost)
       val after = System.currentTimeMillis
 
       logger.info(s"${after - before} milliseconds")
       logger.info(s"Writing to $catalog $writeId")
       HadoopLayerWriter(catalog).write(writeId, cost, ZCurveKeyIndexMethod)
     }
-    // DUMP
+    // DUMP COMMAND
     else if (operation == "dump") {
       val layerName = args(2)
       val id = LayerId(layerName, args(3).toInt)
@@ -135,6 +133,20 @@ object CostDistance {
       logger.debug(s"Dump: catalog=$catalog input=$id output=/tmp/tif/${layerName}-*.tif")
       dump(layer, layerName)
     }
+    // HISTOGRAM
+    else if (operation == "histogram") {
+      val layerName = args(2)
+      val id = LayerId(layerName, args(3).toInt)
+      val attributeStore = HadoopAttributeStore(catalog)
+      val layer =
+        HadoopLayerReader(catalog)
+          .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](id)
+
+      logger.debug(s"Histogram: catalog=$catalog input=$id")
+      attributeStore.write(id, "histogram", layer.histogram())
+    }
+    // ANY OTHER COMMAND
+    else logger.debug(s"Unknown Operaton: $operation")
 
     sparkContext.stop
   }
