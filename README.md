@@ -1,4 +1,18 @@
-# Build #
+# Raw Data #
+
+The demo uses [Mapzen Elevation Data](https://mapzen.com/blog/elevation) covering roughly the continental U.S.
+Those data can be obtained by executing the following command in the directory `/tmp/NED`.
+```bash
+for x in $(seq 19 36)
+do
+  for y in $(seq 43 54)
+  do
+    wget https://terrain-preview.mapzen.com/geotiff/7/${x}/${y}.tif -O 7_${x}_${y}.tif
+  done
+done
+```
+
+# Build Jars #
 
 Type
 ```bash
@@ -9,32 +23,35 @@ to build the pre-processing jar and the TMS server jar.
 
 # Ingest #
 
-This process requires one additional JAR file and three JSON files.
-
-The extra JAR file can be built directly from the GeoTrellis source tree.
-That can be done by typing
+This process requires one additional JAR file.
+The extra JAR file can be built directly from the GeoTrellis source tree by typing
 ```bash
 cd $HOME/local/src/geotrellis
 ./sbt "project spark-etl" assembly
 cp spark-etl/target/scala-2.11/geotrellis-spark-etl-assembly-1.0.0-SNAPSHOT.jar /tmp
 ```
-or similar, where paths and the assembly filename are changed as appropriate.
+or similar (where paths and the assembly filename are changed appropriatly).
 
-The three required JSON files are in a directory called `json` under the root of this project.
-Those three files should be edited as appropriate to make sure that the various paths given therein are correct.
-More information about the ETL process can be found [here](https://github.com/geotrellis/geotrellis/blob/master/docs/spark-etl/spark-etl-run-examples.md).
-
-The raw data can be transformed into a GeoTrellis layer with a command similar to the following:
+The raw data can be transformed into a GeoTrellis layer with a command similar to the following
 ```bash
 $SPARK_HOME/bin/spark-submit \
    --class geotrellis.spark.etl.SinglebandIngest \
    --master 'local[*]' \
    --driver-memory 16G \
    geotrellis-spark-etl-assembly-1.0.0-SNAPSHOT.jar \
-   --input "file:///tmp/input.json" \
-   --output "file:///tmp/output.json" \
-   --backend-profiles "file:///tmp/backend-profiles.json"
+   --input "file://$(pwd)/json/input.json" \
+   --output "file://$(pwd)/json/output.json" \
+   --backend-profiles "file://$(pwd)/json/backend-profiles.json"
 ```
+or by typing
+```bash
+./scripts/ingest.sh
+```
+to use the provided ingest script.
+
+Please note that the ingest script is only suitable for local use
+due to the options used to invoke `spark-submit`,
+and because of the assumed source and destination locations of the data.
 
 # Pre-Process #
 
@@ -85,27 +102,22 @@ $SPARK_HOME/bin/spark-submit \
 
 Simply type
 ```bash
-./preprocess.sh
+./scripts/preprocess.sh
 ```
 to perform all of the above steps.
 The script also takes the name of the elevation layer and its zoom as optional arguments.
-The lines
-```bash
-./preprocess.sh ned
-```
-and
-```bash
-./preprocess.sh ned 9
-```
-are examples.
 
 ## EMR ##
 
-The `preprocess.sh` script is not suitable for use on EMR,
-because it lacks command line arguments to `spark-submit` that are necessary to make it run smoothly.
-Either modify the script so that the invocations of `spark-submit` resemble the one below, or do the pre-processing steps manually.
-Please note: the invocation below assumes the existance of the `log4j.properties` file (copied from the `resources` directory of the pre-processing jar) on the EMR master.
-Also: depending on the size dataset, some amount of trial-and-error may be required to get a set of working `spark-submit` arguments.
+The `preprocess.sh` script is not suitable for use on EMR
+because the command line arguments to `spark-submit` in the script are not sufficient to make it run smoothly.
+Either modify the script so that the invocations of `spark-submit` resemble the one below,
+or do the pre-processing steps manually.
+Please note that the invocation below assumes the existance of the `log4j.properties` file
+(copied from the `resources` directory of the pre-processing jar)
+on the EMR master.
+Depending on the size dataset,
+some amount of trial-and-error may be required to get a set of working `spark-submit` arguments.
 
 On EMR, the `cost` layer can be computed in something like the following way.
 ```bash
@@ -122,11 +134,20 @@ spark-submit \
 
 ## Local ##
 
-Start the TMS server:
+Start the TMS server by typing
 ```bash
 $SPARK_HOME/bin/spark-submit server/target/scala-2.11/server-assembly-0.jar
+```
+or
+```bash
+./scripts/server.sh
 ```
 
 ## EMR ##
 
 Modifiations the `application.conf` will be required.
+After that, type
+```bash
+spark-submit server-assembly-0.jar
+```
+or similar.
