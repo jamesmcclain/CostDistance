@@ -1,3 +1,12 @@
+# Build #
+
+Type
+```bash
+sbt "project cdistance" assembly
+sbt "project server" assembly
+```
+to build the pre-processing jar and the TMS server jar.
+
 # Ingest #
 
 This process requires one additional JAR file and three JSON files.
@@ -27,9 +36,13 @@ $SPARK_HOME/bin/spark-submit \
    --backend-profiles "file:///tmp/backend-profiles.json"
 ```
 
-# Run #
+# Pre-Process #
 
-### Locally ###
+## Local ##
+
+The pre-processing step can be done manually or with the provided `preprocess.sh` script.
+
+### Manual ###
 
 Compute the `slope` layer to use as the friction layer:
 ```bash
@@ -67,12 +80,14 @@ $SPARK_HOME/bin/spark-submit \
    'file:///tmp/hdfs-catalog' pyramid cost <z> cost-pyramid 256
 ```
 
-Start the TMS server:
+### Script ###
+
+Type
 ```bash
-$SPARK_HOME/bin/spark-submit server/target/scala-2.11/server-assembly-0.jar
+./preprocess.sh
 ```
 
-### On EMR ###
+## EMR ##
 
 On EMR, the `cost` layer can be computed in something like the following way:
 ```bash
@@ -84,4 +99,11 @@ spark-submit \
    --conf "spark.driver.extraJavaOptions=-XX:+UseConcMarkSweepGC -XX:CMSInitiatingOccupancyFraction=70 -XX:MaxHeapFreeRatio=70 -XX:+CMSClassUnloadingEnabled -XX:OnOutOfMemoryError='kill -9 %p' -Dlog4j.configuration=file:///home/hadoop/log4j.properties" \
    cdistance-assembly-0.jar \
    'hdfs:/catalog' costdistance friction cost 0 /tmp/cost-distance/points/points.shp 200000
+```
+
+# Demo Server #
+
+Start the TMS server:
+```bash
+$SPARK_HOME/bin/spark-submit server/target/scala-2.11/server-assembly-0.jar
 ```
