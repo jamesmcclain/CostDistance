@@ -27,21 +27,22 @@ import org.apache.spark.{SparkConf, SparkContext}
 
 
 object Main {
-  val sparkConf = (new SparkConf()).setAppName("TMS Server")
-  val sparkContext = new SparkContext(sparkConf)
-  implicit val sc = sparkContext
-
-  val config = ConfigFactory.load()
-  val staticPath = config.getString("geotrellis.server.static-path")
-  val port = config.getInt("geotrellis.port")
-  val host = config.getString("geotrellis.hostname")
-  val pyramidName = config.getString("geotrellis.pyramid")
-  val histogramId = LayerId(
-    config.getString("geotrellis.hname"),
-    config.getInt("geotrellis.hzoom")
-  )
 
   def main(args: Array[String]): Unit = {
+
+    val sparkConf = (new SparkConf()).setAppName("TMS Server")
+    val sparkContext = new SparkContext(sparkConf)
+    implicit val sc = sparkContext
+
+    val config = ConfigFactory.load()
+    val port = config.getInt("geotrellis.port")
+    val host = config.getString("geotrellis.hostname")
+    val histogramId =
+      if (args.length > 2) LayerId(args(0), args(1).toInt)
+      else LayerId(config.getString("geotrellis.hname"), config.getInt("geotrellis.hzoom"))
+    val pyramidName =
+      if (args.length > 3) args(2)
+      else config.getString("geotrellis.pyramid")
 
     implicit val system = ActorSystem("tms-server")
 
@@ -49,7 +50,7 @@ object Main {
 
     // create and start our service actor
     val service = {
-      val actorProps = Props(classOf[WeightedServiceActor], pyramidName, histogramId, staticPath, dataModel)
+      val actorProps = Props(classOf[DemoServiceActor], pyramidName, histogramId, dataModel)
       system.actorOf(actorProps, "tms-server")
     }
 

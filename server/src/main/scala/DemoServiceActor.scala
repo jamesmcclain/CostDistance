@@ -41,10 +41,9 @@ import spray.routing._
 import scala.collection.JavaConversions._
 import scala.concurrent.Future
 
-class WeightedServiceActor(
+class DemoServiceActor(
   pyramidName: String,
   id: LayerId,
-  staticPath: String,
   dataModel: DataModel
 ) extends Actor with HttpService {
   override def actorRefFactory = context
@@ -58,42 +57,24 @@ class WeightedServiceActor(
     .read[Histogram[Double]](id, "histogram")
     .asInstanceOf[StreamingHistogram]
 
-  def serviceRoute =
-    pathPrefix("ping") {
-      complete { "pong" }
-    } ~
-    pathPrefix("gt") {
-      pathPrefix("tms")(tms)
-    } // ~
-    // pathEndOrSingleSlash {
-    //   getFromFile(staticPath + "/index.html")
-    // } ~
-    // pathPrefix("") {
-    //   getFromDirectory(staticPath)
-    // }
+  def serviceRoute = pathPrefix("tms")(tms)
 
-  /** http://localhost:8777/gt/tms/{z}/{x}/{y}?colorRamp=yellow-to-red-heatmap */
+  /** http://localhost:8777/tms/{z}/{x}/{y}?colorRamp=yellow-to-red-heatmap */
   def tms =
-    get {
-      pathPrefix(IntNumber / IntNumber / IntNumber) { (zoom, x, y) =>
-        parameters(
-          'colorRamp ? "blue-to-red",
-          'transparent ? "0"
-        ) { (colorRamp, transparentParam) =>
+    get({
+      pathPrefix(IntNumber / IntNumber / IntNumber)({ (zoom, x, y) =>
+        parameters('colorRamp ? "blue-to-red")({ (colorRamp) =>
           val key = SpatialKey(x, y)
-          val transparent = transparentParam.split(",").map(_.toDouble).toSet
-
           val tile = tileReader
             .reader[SpatialKey, Tile](LayerId(pyramidName, zoom))
             .read(key)
-
           val breaks = histogram.quantileBreaks(1<<8)
           val ramp = ColorRampMap.getOrElse(colorRamp, ColorRamps.BlueToRed).toColorMap(breaks)
 
-          respondWithMediaType(MediaTypes.`image/png`) {
+          respondWithMediaType(MediaTypes.`image/png`)({
             complete(tile.renderPng(ramp).bytes)
-          }
-        }
-      }
-    }
+          })
+        })
+      })
+    })
 }

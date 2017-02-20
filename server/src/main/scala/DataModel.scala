@@ -30,22 +30,9 @@ import org.apache.spark.SparkContext
 
 
 class DataModel(config: Config)(implicit val sc: SparkContext) {
-
-  val (collectionReader, tileReader, attributeStore) = {
+  val (tileReader, attributeStore) = {
     val path = config.getString("hadoop.path")
     val attributeStore = HadoopAttributeStore(path)
-    (
-      HadoopCollectionLayerReader(attributeStore),
-      HadoopValueReader(attributeStore),
-      attributeStore
-    )
+    (HadoopValueReader(attributeStore), attributeStore)
   }
-
-  // A map from layer name to that layer's maximum zoom level
-  val layerNamesToMaxZooms: Map[String, Int] =
-    attributeStore.layerIds
-      .groupBy(_.name)
-      .map { case (name, layerIds) => (name, layerIds.map(_.zoom).max) }
-      .toMap
-
 }
