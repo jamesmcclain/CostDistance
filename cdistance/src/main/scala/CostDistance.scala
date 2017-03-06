@@ -67,8 +67,10 @@ object CostDistance {
       val y = args(6).toDouble
       val z = args(7).toDouble
       val maxDistance = args(8).toDouble
+      val and = ((args.length > 9) && (args(9) == "AND"))
+      val andOr = if (and) "AND"; else "OR"
 
-      logger.debug(s"Viewshed: catalog=$catalog input=$readId output=$writeId ($x, $y, $z) maxDistance=$maxDistance")
+      logger.debug(s"Viewshed: catalog=$catalog input=$readId output=$writeId ($x, $y, $z) maxDistance=$maxDistance $andOr")
 
       // Read elevation layer
       val elevation =
@@ -77,7 +79,7 @@ object CostDistance {
 
       // Compute viewshed layer
       val before = System.currentTimeMillis
-      val viewshed = IterativeViewshed(elevation, Point(x, y), z, maxDistance)
+      val viewshed = IterativeViewshed(elevation, Point(x, y), z, maxDistance, and)
       val after = System.currentTimeMillis
 
       logger.info(s"${after - before} milliseconds")
