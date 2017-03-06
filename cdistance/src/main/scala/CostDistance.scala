@@ -66,8 +66,9 @@ object CostDistance {
       val x = args(5).toDouble
       val y = args(6).toDouble
       val z = args(7).toDouble
+      val maxDistance = args(8).toDouble
 
-      logger.debug(s"Viewshed: catalog=$catalog input=$readId output=$writeId ($x, $y, $z)")
+      logger.debug(s"Viewshed: catalog=$catalog input=$readId output=$writeId ($x, $y, $z) maxDistance=$maxDistance")
 
       // Read elevation layer
       val elevation =
@@ -76,7 +77,7 @@ object CostDistance {
 
       // Compute viewshed layer
       val before = System.currentTimeMillis
-      val viewshed = IterativeViewshed(elevation, Point(x, y), z)
+      val viewshed = IterativeViewshed(elevation, Point(x, y), z, maxDistance)
       val after = System.currentTimeMillis
 
       logger.info(s"${after - before} milliseconds")
