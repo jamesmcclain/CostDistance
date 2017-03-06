@@ -3,11 +3,11 @@ package com.example.cdistance
 import geotrellis.geotools._
 import geotrellis.proj4.WebMercator
 import geotrellis.raster._
-import geotrellis.raster.costdistance._
+// import geotrellis.raster.costdistance._
 import geotrellis.raster.io._
 import geotrellis.shapefile._
 import geotrellis.spark._
-import geotrellis.spark.costdistance._
+// import geotrellis.spark.costdistance._
 import geotrellis.spark.io._
 import geotrellis.spark.io.hadoop._
 import geotrellis.spark.io.index._
@@ -92,36 +92,36 @@ object CostDistance {
       logger.info(s"Writing to $catalog $writeId")
       HadoopLayerWriter(catalog).write(writeId, slope, ZCurveKeyIndexMethod)
     }
-    // COST-DISTANCE COMMAND
-    else if (operation == "costdistance") {
-      val zoom = args(4).toInt
-      val readId = LayerId(args(2), zoom)
-      val writeId = LayerId(args(3), zoom)
-      val shapeFile = args(5)
-      val maxCost = args(6).toDouble
+    // // COST-DISTANCE COMMAND
+    // else if (operation == "costdistance") {
+    //   val zoom = args(4).toInt
+    //   val readId = LayerId(args(2), zoom)
+    //   val writeId = LayerId(args(3), zoom)
+    //   val shapeFile = args(5)
+    //   val maxCost = args(6).toDouble
 
-      logger.debug(s"Cost-Distance: catalog=$catalog input=$readId output=$writeId shapeFile=$shapeFile maxCost=$maxCost")
+    //   logger.debug(s"Cost-Distance: catalog=$catalog input=$readId output=$writeId shapeFile=$shapeFile maxCost=$maxCost")
 
-      // Read friction layer
-      val friction =
-        HadoopLayerReader(catalog)
-          .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](readId)
+    //   // Read friction layer
+    //   val friction =
+    //     HadoopLayerReader(catalog)
+    //       .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](readId)
 
-      // Read starting points
-      val points: List[Point] =
-        ShapeFileReader
-          .readSimpleFeatures(shapeFile)
-          .map({ sf => sf.toGeometry[Point] })
+    //   // Read starting points
+    //   val points: List[Point] =
+    //     ShapeFileReader
+    //       .readSimpleFeatures(shapeFile)
+    //       .map({ sf => sf.toGeometry[Point] })
 
-      // Compute cost layer
-      val before = System.currentTimeMillis
-      val cost = friction.costdistance(points, maxCost)
-      val after = System.currentTimeMillis
+    //   // Compute cost layer
+    //   val before = System.currentTimeMillis
+    //   val cost = friction.costdistance(points, maxCost)
+    //   val after = System.currentTimeMillis
 
-      logger.info(s"${after - before} milliseconds")
-      logger.info(s"Writing to $catalog $writeId")
-      HadoopLayerWriter(catalog).write(writeId, cost, ZCurveKeyIndexMethod)
-    }
+    //   logger.info(s"${after - before} milliseconds")
+    //   logger.info(s"Writing to $catalog $writeId")
+    //   HadoopLayerWriter(catalog).write(writeId, cost, ZCurveKeyIndexMethod)
+    // }
     // DUMP COMMAND
     else if (operation == "dump") {
       val layerName = args(2)
