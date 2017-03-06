@@ -13,6 +13,7 @@ import geotrellis.spark.io.hadoop._
 import geotrellis.spark.io.index._
 import geotrellis.spark.pyramid.Pyramid
 import geotrellis.spark.tiling.ZoomedLayoutScheme
+import geotrellis.spark.viewshed._
 import geotrellis.vector._
 
 import org.apache.log4j.Logger
@@ -57,8 +58,33 @@ object CostDistance {
     val sparkContext = new SparkContext(sparkConf)
     implicit val sc = sparkContext
 
+    // VIEWSHED COMMAND
+    if (operation == "viewshed") {
+      val zoom = args(4).toInt
+      val readId = LayerId(args(2), zoom)
+      val writeId = LayerId(args(3), zoom)
+      val x = args(5).toDouble
+      val y = args(6).toDouble
+      val z = args(7).toDouble
+
+      logger.debug(s"Viewshed: catalog=$catalog input=$readId output=$writeId ($x, $y, $z)")
+
+      // Read elevation layer
+      val elevation =
+        HadoopLayerReader(catalog)
+          .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](readId)
+
+      // Compute viewshed layer
+      val before = System.currentTimeMillis
+      val viewshed = IterativeViewshed(elevation, Point(x, y), z)
+      val after = System.currentTimeMillis
+
+      logger.info(s"${after - before} milliseconds")
+      logger.info(s"Writing to $catalog $writeId")
+      HadoopLayerWriter(catalog).write(writeId, viewshed, ZCurveKeyIndexMethod)
+    }
     // PYRAMID COMMAND
-    if (operation == "pyramid") {
+    else if (operation == "pyramid") {
       val inputZoom = args(3).toInt
       val outputLayerName = args(4)
       val size = args(5).toInt
