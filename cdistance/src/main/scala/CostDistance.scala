@@ -5,6 +5,7 @@ import geotrellis.proj4.WebMercator
 import geotrellis.raster._
 // import geotrellis.raster.costdistance._
 import geotrellis.raster.io._
+import geotrellis.raster.viewshed.R2Viewshed._
 import geotrellis.shapefile._
 import geotrellis.spark._
 // import geotrellis.spark.costdistance._
@@ -22,6 +23,8 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.geotools.gce.geotiff._
 import org.opengis.parameter.GeneralParameterValue
 
+import com.vividsolutions.jts.{ geom => jts }
+
 
 object CostDistance {
 
@@ -37,7 +40,7 @@ object CostDistance {
       val extent = mt(k)
       val pr = ProjectedRaster(Raster(v, extent), WebMercator)
       val gc = pr.toGridCoverage2D
-      val writer = new GeoTiffWriter(new java.io.File(s"/tmp/tif/${stem}-${System.currentTimeMillis}.tif"))
+      val writer = new GeoTiffWriter(new java.io.File(s"/tmp/tif/${stem}-${k.col}-${k.row}.tif"))
       writer.write(gc, Array.empty[GeneralParameterValue])
     })
   }
@@ -63,14 +66,20 @@ object CostDistance {
       val zoom = args(4).toInt
       val readId = LayerId(args(2), zoom)
       val writeId = LayerId(args(3), zoom)
-      val x = args(5).toDouble
-      val y = args(6).toDouble
-      val z = args(7).toDouble
-      val maxDistance = args(8).toDouble
-      val and = ((args.length > 9) && (args(9) == "AND"))
-      val andOr = if (and) "AND"; else "OR"
+      val maxDistance = args(5).toDouble
+      val op = args(6) match {
+        case "AND" => And()
+        case "OR" => Or()
+        case "PLUS" => Plus()
+        case "U.PLUS" => UniquePlus()
+      }
 
-      logger.debug(s"Viewshed: catalog=$catalog input=$readId output=$writeId ($x, $y, $z) maxDistance=$maxDistance $andOr")
+      val points = args.drop(7)
+        .grouped(3)
+        .toList
+        .map({ case Array(x, y, z) => new jts.Coordinate(x.toDouble, y.toDouble, z.toDouble) })
+
+      logger.debug(s"Viewshed: catalog=$catalog input=$readId output=$writeId maxDistance=$maxDistance op=$op points=${points}")
 
       // Read elevation layer
       val elevation =
@@ -79,7 +88,7 @@ object CostDistance {
 
       // Compute viewshed layer
       val before = System.currentTimeMillis
-      val viewshed = IterativeViewshed(elevation, Point(x, y), z, maxDistance, and)
+      val viewshed = IterativeViewshed(elevation, points, maxDistance, op)
       val after = System.currentTimeMillis
 
       logger.info(s"${after - before} milliseconds")
