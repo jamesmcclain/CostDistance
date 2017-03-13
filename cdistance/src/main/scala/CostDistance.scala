@@ -3,16 +3,18 @@ package com.example.cdistance
 import geotrellis.geotools._
 import geotrellis.proj4.WebMercator
 import geotrellis.raster._
-import geotrellis.raster.costdistance._
+// import geotrellis.raster.costdistance._
 import geotrellis.raster.io._
+import geotrellis.raster.viewshed.R2Viewshed._
 import geotrellis.shapefile._
 import geotrellis.spark._
-import geotrellis.spark.costdistance._
+// import geotrellis.spark.costdistance._
 import geotrellis.spark.io._
 import geotrellis.spark.io.hadoop._
 import geotrellis.spark.io.index._
 import geotrellis.spark.pyramid.Pyramid
 import geotrellis.spark.tiling.ZoomedLayoutScheme
+import geotrellis.spark.viewshed._
 import geotrellis.vector._
 
 import org.apache.log4j.Logger
@@ -20,6 +22,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.{SparkConf, SparkContext}
 import org.geotools.gce.geotiff._
 import org.opengis.parameter.GeneralParameterValue
+
+import com.vividsolutions.jts.{ geom => jts }
 
 
 object CostDistance {
@@ -36,7 +40,7 @@ object CostDistance {
       val extent = mt(k)
       val pr = ProjectedRaster(Raster(v, extent), WebMercator)
       val gc = pr.toGridCoverage2D
-      val writer = new GeoTiffWriter(new java.io.File(s"/tmp/tif/${stem}-${System.currentTimeMillis}.tif"))
+      val writer = new GeoTiffWriter(new java.io.File(s"/tmp/tif/${stem}-${k.col}-${k.row}.tif"))
       writer.write(gc, Array.empty[GeneralParameterValue])
     })
   }
@@ -57,8 +61,47 @@ object CostDistance {
     val sparkContext = new SparkContext(sparkConf)
     implicit val sc = sparkContext
 
+    // VIEWSHED COMMAND
+    if (operation == "viewshed") {
+      val zoom = args(4).toInt
+      val readId = LayerId(args(2), zoom)
+      val writeId = LayerId(args(3), zoom)
+      val maxDistance = args(5).toDouble
+      val op = args(6) match {
+        case "AND" => And()
+        case "DEBUG" => Debug()
+        case "OR" => Or()
+        case "PLUS" => Plus()
+      }
+
+      val points = args.drop(7)
+        .grouped(6)
+        .toList
+        .map({ case ar: Array[String] if (ar.length == 6) => ar.map(_.toDouble) })
+
+      logger.debug(s"Viewshed: catalog=$catalog input=$readId output=$writeId maxDistance=$maxDistance op=$op points=${points.map(_.toList)}")
+
+      // Read elevation layer
+      val elevation =
+        HadoopLayerReader(catalog)
+          .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](readId)
+
+      // Compute viewshed layer
+      val before = System.currentTimeMillis
+      val viewshed = IterativeViewshed(
+        elevation, points,
+        maxDistance = maxDistance,
+        curvature = true,
+        operator = op
+      )
+      val after = System.currentTimeMillis
+
+      logger.info(s"${after - before} milliseconds")
+      logger.info(s"Writing to $catalog $writeId")
+      HadoopLayerWriter(catalog).write(writeId, viewshed, ZCurveKeyIndexMethod)
+    }
     // PYRAMID COMMAND
-    if (operation == "pyramid") {
+    else if (operation == "pyramid") {
       val inputZoom = args(3).toInt
       val outputLayerName = args(4)
       val size = args(5).toInt
@@ -92,36 +135,36 @@ object CostDistance {
       logger.info(s"Writing to $catalog $writeId")
       HadoopLayerWriter(catalog).write(writeId, slope, ZCurveKeyIndexMethod)
     }
-    // COST-DISTANCE COMMAND
-    else if (operation == "costdistance") {
-      val zoom = args(4).toInt
-      val readId = LayerId(args(2), zoom)
-      val writeId = LayerId(args(3), zoom)
-      val shapeFile = args(5)
-      val maxCost = args(6).toDouble
+    // // COST-DISTANCE COMMAND
+    // else if (operation == "costdistance") {
+    //   val zoom = args(4).toInt
+    //   val readId = LayerId(args(2), zoom)
+    //   val writeId = LayerId(args(3), zoom)
+    //   val shapeFile = args(5)
+    //   val maxCost = args(6).toDouble
 
-      logger.debug(s"Cost-Distance: catalog=$catalog input=$readId output=$writeId shapeFile=$shapeFile maxCost=$maxCost")
+    //   logger.debug(s"Cost-Distance: catalog=$catalog input=$readId output=$writeId shapeFile=$shapeFile maxCost=$maxCost")
 
-      // Read friction layer
-      val friction =
-        HadoopLayerReader(catalog)
-          .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](readId)
+    //   // Read friction layer
+    //   val friction =
+    //     HadoopLayerReader(catalog)
+    //       .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](readId)
 
-      // Read starting points
-      val points: List[Point] =
-        ShapeFileReader
-          .readSimpleFeatures(shapeFile)
-          .map({ sf => sf.toGeometry[Point] })
+    //   // Read starting points
+    //   val points: List[Point] =
+    //     ShapeFileReader
+    //       .readSimpleFeatures(shapeFile)
+    //       .map({ sf => sf.toGeometry[Point] })
 
-      // Compute cost layer
-      val before = System.currentTimeMillis
-      val cost = friction.costdistance(points, maxCost)
-      val after = System.currentTimeMillis
+    //   // Compute cost layer
+    //   val before = System.currentTimeMillis
+    //   val cost = friction.costdistance(points, maxCost)
+    //   val after = System.currentTimeMillis
 
-      logger.info(s"${after - before} milliseconds")
-      logger.info(s"Writing to $catalog $writeId")
-      HadoopLayerWriter(catalog).write(writeId, cost, ZCurveKeyIndexMethod)
-    }
+    //   logger.info(s"${after - before} milliseconds")
+    //   logger.info(s"Writing to $catalog $writeId")
+    //   HadoopLayerWriter(catalog).write(writeId, cost, ZCurveKeyIndexMethod)
+    // }
     // DUMP COMMAND
     else if (operation == "dump") {
       val layerName = args(2)
