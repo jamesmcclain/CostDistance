@@ -75,9 +75,9 @@ object CostDistance {
       }
 
       val points = args.drop(7)
-        .grouped(5)
+        .grouped(6)
         .toList
-        .map({ case ar: Array[String] if (ar.length == 5) => ar.map(_.toDouble) })
+        .map({ case ar: Array[String] if (ar.length == 6) => ar.map(_.toDouble) })
 
       logger.debug(s"Viewshed: catalog=$catalog input=$readId output=$writeId maxDistance=$maxDistance op=$op points=${points.map(_.toList)}")
 
