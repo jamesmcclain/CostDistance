@@ -69,17 +69,17 @@ object CostDistance {
       val maxDistance = args(5).toDouble
       val op = args(6) match {
         case "AND" => And()
+        case "DEBUG" => Debug()
         case "OR" => Or()
         case "PLUS" => Plus()
-        case "U.PLUS" => UniquePlus()
       }
 
       val points = args.drop(7)
-        .grouped(3)
+        .grouped(5)
         .toList
-        .map({ case Array(x, y, z) => new jts.Coordinate(x.toDouble, y.toDouble, z.toDouble) })
+        .map({ case ar: Array[String] if (ar.length == 5) => ar.map(_.toDouble) })
 
-      logger.debug(s"Viewshed: catalog=$catalog input=$readId output=$writeId maxDistance=$maxDistance op=$op points=${points}")
+      logger.debug(s"Viewshed: catalog=$catalog input=$readId output=$writeId maxDistance=$maxDistance op=$op points=${points.map(_.toList)}")
 
       // Read elevation layer
       val elevation =
@@ -88,7 +88,12 @@ object CostDistance {
 
       // Compute viewshed layer
       val before = System.currentTimeMillis
-      val viewshed = IterativeViewshed(elevation, points, maxDistance, op)
+      val viewshed = IterativeViewshed(
+        elevation, points,
+        maxDistance = maxDistance,
+        curvature = true,
+        operator = op
+      )
       val after = System.currentTimeMillis
 
       logger.info(s"${after - before} milliseconds")
