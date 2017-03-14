@@ -30,7 +30,11 @@ object Main {
 
   def main(args: Array[String]): Unit = {
 
-    val sparkConf = (new SparkConf()).setAppName("TMS Server")
+    val sparkConf = (new SparkConf())
+      .setAppName("TMS Server")
+      .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+      .set("spark.kryo.registrator", "geotrellis.spark.io.kryo.KryoRegistrator")
+      .set("spark.kryo.unsafe", "true")
     val sparkContext = new SparkContext(sparkConf)
     implicit val sc = sparkContext
 

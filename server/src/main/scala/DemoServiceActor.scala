@@ -83,8 +83,7 @@ class DemoServiceActor(sparkContext: SparkContext, dataModel: DataModel)
   val tileReader = dataModel.tileReader
 
   def serviceRoute =
-    pathPrefix("tms" / "color")(colorTms) ~
-    pathPrefix("tms" / "monocrhome")(monochromeTms) ~
+    pathPrefix("tms")(tms) ~
     pathPrefix("poll")(poll) ~
     pathPrefix("compute")(compute)
 
@@ -123,8 +122,8 @@ class DemoServiceActor(sparkContext: SparkContext, dataModel: DataModel)
     })
   }
 
-  // http://localhost:8777/tms/color/{name}/{z}/{x}/{y}?colorRamp=yellow-to-red-heatmap
-  def colorTms = {
+  // http://localhost:8777/tms/{name}/{z}/{x}/{y}?colorRamp=yellow-to-red-heatmap
+  def tms = {
     get({
       pathPrefix(Segment / IntNumber / IntNumber / IntNumber)({ (pyramidName, zoom, x, y) =>
         parameters('colorRamp ? "blue-to-red")({ (colorRamp) =>
@@ -132,35 +131,24 @@ class DemoServiceActor(sparkContext: SparkContext, dataModel: DataModel)
           val tile = tileReader
             .reader[SpatialKey, Tile](LayerId(pyramidName, zoom))
             .read(key)
-          val histogram = attributeStore
-            .read[Histogram[Double]](LayerId(pyramidName, 0), "histogram")
-            .asInstanceOf[StreamingHistogram]
+          val histogram: StreamingHistogram = try {
+            attributeStore
+              .read[Histogram[Double]](LayerId(pyramidName, 0), "histogram")
+              .asInstanceOf[StreamingHistogram]
+          }
+          catch {
+            case e: Exception =>
+              val sh = StreamingHistogram()
+              sh.countItem(item = 1.0, count = 1); sh
+          }
           val breaks = histogram.quantileBreaks(1<<8)
           val ramp = ColorRampMap.getOrElse(colorRamp, ColorRamps.BlueToRed).toColorMap(breaks)
+          val bytes: Array[Byte] = tile.renderPng(ramp).bytes
 
-          respondWithMediaType(MediaTypes.`image/png`)({
-            complete(tile.renderPng(ramp).bytes)
-          })
+          respondWithMediaType(MediaTypes.`image/png`)({ complete(HttpData(bytes)) })
         })
       })
     })
   }
 
-  // http://localhost:8777/tms/monochrome/{name}/{z}/{x}/{y}
-  def monochromeTms = {
-    get({
-      pathPrefix(Segment / IntNumber / IntNumber / IntNumber)({ (pyramidName, zoom, x, y) =>
-        parameters('colorRamp ? "blue-to-red")({ (colorRamp) =>
-          val key = SpatialKey(x, y)
-          val tile = tileReader
-            .reader[SpatialKey, Tile](LayerId(pyramidName, zoom))
-            .read(key)
-
-          respondWithMediaType(MediaTypes.`image/png`)({
-            complete(tile.renderPng.bytes)
-          })
-        })
-      })
-    })
-  }
 }
