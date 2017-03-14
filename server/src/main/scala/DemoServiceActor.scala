@@ -23,12 +23,14 @@ import geotrellis.raster.io._
 import geotrellis.raster.mapalgebra.local._
 import geotrellis.raster.render._
 import geotrellis.raster.resample.Bilinear
+import geotrellis.raster.viewshed.R2Viewshed._
 import geotrellis.spark._
 import geotrellis.spark.io._
 import geotrellis.spark.io.file._
 import geotrellis.spark.tiling.{ZoomedLayoutScheme, LayoutDefinition}
-import geotrellis.vector.io.json.Implicits._
+import geotrellis.spark.viewshed._
 import geotrellis.vector._
+import geotrellis.vector.io.json.Implicits._
 import geotrellis.vector.reproject._
 
 import akka.actor._
@@ -57,6 +59,18 @@ object Compute {
       }
   }
 
+  def compute(
+    reader: FilteringLayerReader[LayerId], writer: LayerWriter[LayerId],
+    input: String, output: String, zoom: Int,
+    x: Double, y: Double, altitude: Double
+  ): Unit = {
+    val inputLayerId = LayerId(input, zoom)
+    val observerLayerId = LayerId(s"${output}-observer", 0)
+    val craftLayerId = LayerId(s"${output}-craft", 0)
+
+    println(s"$reader $writer $input $output $zoom $x $y $altitude")
+  }
+
 }
 
 class DemoServiceActor(sparkContext: SparkContext, dataModel: DataModel)
@@ -71,24 +85,45 @@ class DemoServiceActor(sparkContext: SparkContext, dataModel: DataModel)
   def serviceRoute =
     pathPrefix("tms" / "color")(colorTms) ~
     pathPrefix("tms" / "monocrhome")(monochromeTms) ~
-    pathPrefix("poll")(poll)
+    pathPrefix("poll")(poll) ~
+    pathPrefix("compute")(compute)
 
+  // http://localhost:8777/compute?input=<input>&output=<output>&zoom=<zoom>&x=<x>&y=<y>&altitude=<altitude>
+  def compute = {
+    get({
+      parameters('input, 'output, 'zoom, 'x, 'y, 'altitude)({ (input, output, zoom, x, y, altitude) => {
+        val reader = dataModel.reader
+        val writer = dataModel.writer
+        val tr = new Thread(new Runnable() {
+          override def run(): Unit =
+            Compute.compute(reader, writer, input, output, zoom.toInt, x.toDouble, y.toDouble, altitude.toDouble)
+        })
+
+        tr.start
+        complete(JsObject(
+          "observer" -> JsString(s"${output}-observer"),
+          "craft" -> JsString(s"${output}-craft")))
+      }})
+    })
+  }
+
+  // http://localhost:8777/poll?name=<name>
   def poll = {
     get({
-      pathPrefix(Segment)({ (pyramidName) =>
+      parameters('name)({ (name) => {
         val done: Boolean = try {
-          attributeStore.read[Boolean](LayerId(pyramidName, 0), "done")
+          attributeStore.read[Boolean](LayerId(name, 0), "done")
         }
         catch {
           case  e: Exception => false
         }
 
         complete(JsObject("done" -> JsBoolean(done)))
-      })
+      }})
     })
   }
 
-  /** http://localhost:8777/tms/color/{name}/{z}/{x}/{y}?colorRamp=yellow-to-red-heatmap */
+  // http://localhost:8777/tms/color/{name}/{z}/{x}/{y}?colorRamp=yellow-to-red-heatmap
   def colorTms = {
     get({
       pathPrefix(Segment / IntNumber / IntNumber / IntNumber)({ (pyramidName, zoom, x, y) =>
@@ -111,7 +146,7 @@ class DemoServiceActor(sparkContext: SparkContext, dataModel: DataModel)
     })
   }
 
-  /** http://localhost:8777/tms/bw/{name}/{z}/{x}/{y} */
+  // http://localhost:8777/tms/monochrome/{name}/{z}/{x}/{y}
   def monochromeTms = {
     get({
       pathPrefix(Segment / IntNumber / IntNumber / IntNumber)({ (pyramidName, zoom, x, y) =>
