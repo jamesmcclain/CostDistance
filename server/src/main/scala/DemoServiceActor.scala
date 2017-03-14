@@ -36,16 +36,31 @@ import org.apache.spark.{SparkConf, SparkContext}
 import spray.http._
 import spray.httpx.SprayJsonSupport._
 import spray.json._
+import spray.json.DefaultJsonProtocol._
 import spray.routing._
 
 import scala.collection.JavaConversions._
 import scala.concurrent.Future
 
-class DemoServiceActor(
-  pyramidName: String,
-  id: LayerId,
-  dataModel: DataModel
-) extends Actor with HttpService {
+
+object Compute {
+  implicit object BooleanFormat extends RootJsonFormat[Boolean] {
+    def write(bit: Boolean) =
+      JsObject("bit" -> JsBoolean(bit))
+
+    def read(value: JsValue): Boolean =
+      value.asJsObject.getFields("bit") match {
+        case Seq(JsBoolean(bit)) =>
+          bit
+        case _ =>
+          throw new DeserializationException("Boolean expected")
+      }
+  }
+
+}
+
+class DemoServiceActor(sparkContext: SparkContext, dataModel: DataModel)
+    extends Actor with HttpService {
   override def actorRefFactory = context
   override def receive = runRoute(serviceRoute)
   implicit val executionContext = actorRefFactory.dispatcher
@@ -53,21 +68,38 @@ class DemoServiceActor(
   val attributeStore = dataModel.attributeStore
   val tileReader = dataModel.tileReader
 
-  val histogram = attributeStore
-    .read[Histogram[Double]](id, "histogram")
-    .asInstanceOf[StreamingHistogram]
+  def serviceRoute =
+    pathPrefix("tms" / "color")(colorTms) ~
+    pathPrefix("tms" / "monocrhome")(monochromeTms) ~
+    pathPrefix("poll")(poll)
 
-  def serviceRoute = pathPrefix("tms")(tms)
-
-  /** http://localhost:8777/tms/{z}/{x}/{y}?colorRamp=yellow-to-red-heatmap */
-  def tms =
+  def poll = {
     get({
-      pathPrefix(IntNumber / IntNumber / IntNumber)({ (zoom, x, y) =>
+      pathPrefix(Segment)({ (pyramidName) =>
+        val done: Boolean = try {
+          attributeStore.read[Boolean](LayerId(pyramidName, 0), "done")
+        }
+        catch {
+          case  e: Exception => false
+        }
+
+        complete(JsObject("done" -> JsBoolean(done)))
+      })
+    })
+  }
+
+  /** http://localhost:8777/tms/color/{name}/{z}/{x}/{y}?colorRamp=yellow-to-red-heatmap */
+  def colorTms = {
+    get({
+      pathPrefix(Segment / IntNumber / IntNumber / IntNumber)({ (pyramidName, zoom, x, y) =>
         parameters('colorRamp ? "blue-to-red")({ (colorRamp) =>
           val key = SpatialKey(x, y)
           val tile = tileReader
             .reader[SpatialKey, Tile](LayerId(pyramidName, zoom))
             .read(key)
+          val histogram = attributeStore
+            .read[Histogram[Double]](LayerId(pyramidName, 0), "histogram")
+            .asInstanceOf[StreamingHistogram]
           val breaks = histogram.quantileBreaks(1<<8)
           val ramp = ColorRampMap.getOrElse(colorRamp, ColorRamps.BlueToRed).toColorMap(breaks)
 
@@ -77,4 +109,23 @@ class DemoServiceActor(
         })
       })
     })
+  }
+
+  /** http://localhost:8777/tms/bw/{name}/{z}/{x}/{y} */
+  def monochromeTms = {
+    get({
+      pathPrefix(Segment / IntNumber / IntNumber / IntNumber)({ (pyramidName, zoom, x, y) =>
+        parameters('colorRamp ? "blue-to-red")({ (colorRamp) =>
+          val key = SpatialKey(x, y)
+          val tile = tileReader
+            .reader[SpatialKey, Tile](LayerId(pyramidName, zoom))
+            .read(key)
+
+          respondWithMediaType(MediaTypes.`image/png`)({
+            complete(tile.renderPng.bytes)
+          })
+        })
+      })
+    })
+  }
 }

@@ -37,12 +37,6 @@ object Main {
     val config = ConfigFactory.load()
     val port = config.getInt("geotrellis.port")
     val host = config.getString("geotrellis.hostname")
-    val histogramId =
-      if (args.length > 2) LayerId(args(0), args(1).toInt)
-      else LayerId(config.getString("geotrellis.hname"), config.getInt("geotrellis.hzoom"))
-    val pyramidName =
-      if (args.length > 3) args(2)
-      else config.getString("geotrellis.pyramid")
 
     implicit val system = ActorSystem("tms-server")
 
@@ -50,7 +44,7 @@ object Main {
 
     // create and start our service actor
     val service = {
-      val actorProps = Props(classOf[DemoServiceActor], pyramidName, histogramId, dataModel)
+      val actorProps = Props(classOf[DemoServiceActor], sparkContext, dataModel)
       system.actorOf(actorProps, "tms-server")
     }
 
