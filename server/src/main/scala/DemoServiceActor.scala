@@ -23,10 +23,12 @@ import geotrellis.raster.io._
 import geotrellis.raster.mapalgebra.local._
 import geotrellis.raster.render._
 import geotrellis.raster.resample.Bilinear
-import geotrellis.raster.viewshed.R2Viewshed._
+import geotrellis.raster.viewshed.R2Viewshed
 import geotrellis.spark._
 import geotrellis.spark.io._
 import geotrellis.spark.io.file._
+import geotrellis.spark.io.index._
+import geotrellis.spark.pyramid.Pyramid
 import geotrellis.spark.tiling.{ZoomedLayoutScheme, LayoutDefinition}
 import geotrellis.spark.viewshed._
 import geotrellis.vector._
@@ -42,35 +44,47 @@ import spray.json.DefaultJsonProtocol._
 import spray.routing._
 
 import scala.collection.JavaConversions._
+import scala.collection.mutable
 import scala.concurrent.Future
 
 
 object Compute {
-  implicit object BooleanFormat extends RootJsonFormat[Boolean] {
-    def write(bit: Boolean) =
-      JsObject("bit" -> JsBoolean(bit))
-
-    def read(value: JsValue): Boolean =
-      value.asJsObject.getFields("bit") match {
-        case Seq(JsBoolean(bit)) =>
-          bit
-        case _ =>
-          throw new DeserializationException("Boolean expected")
-      }
-  }
 
   def compute(
-    reader: FilteringLayerReader[LayerId], writer: LayerWriter[LayerId],
-    input: String, output: String, zoom: Int,
+    sparkContext: SparkContext,
+    reader: FilteringLayerReader[LayerId], writer: LayerWriter[LayerId], as: AttributeStore,
+    terrainName: String, output1: String, output2: String, zoom: Int,
     x: Double, y: Double, altitude: Double
   ): Unit = {
-    val inputLayerId = LayerId(input, zoom)
-    val observerLayerId = LayerId(s"${output}-observer", 0)
-    val craftLayerId = LayerId(s"${output}-craft", 0)
+    implicit val sc = sparkContext
+    val terrainId = LayerId(terrainName, zoom)
+    val terrain = reader.read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](terrainId)
+    val layoutScheme = ZoomedLayoutScheme(WebMercator, 256)
 
-    println(s"$reader $writer $input $output $zoom $x $y $altitude")
+    val z = 0.0
+    val angle = 0.0
+    val fov = -1.0
+
+    val touched = mutable.Set.empty[SpatialKey]
+
+    {
+      val point: Array[Double] = Array(x, y, z, angle, fov, altitude)
+      val before = System.currentTimeMillis
+      val src = IterativeViewshed(
+        terrain, List(point),
+        maxDistance = 100000,
+        curvature = true,
+        operator = R2Viewshed.Or(),
+        touched = touched)
+      Pyramid.upLevels(src, layoutScheme, zoom, 1)({ (rdd, zoom) =>
+        writer.write(LayerId(output1, zoom), rdd, ZCurveKeyIndexMethod) })
+      val after = System.currentTimeMillis
+      val millis = after - before
+      as.write(LayerId(output1, 0), "millis", millis)
+    }
+
+
   }
-
 }
 
 class DemoServiceActor(sparkContext: SparkContext, dataModel: DataModel)
@@ -84,24 +98,27 @@ class DemoServiceActor(sparkContext: SparkContext, dataModel: DataModel)
 
   def serviceRoute =
     pathPrefix("tms")(tms) ~
-    pathPrefix("poll")(poll) ~
-    pathPrefix("compute")(compute)
+  pathPrefix("poll")(poll) ~
+  pathPrefix("compute")(compute)
 
-  // http://localhost:8777/compute?input=<input>&output=<output>&zoom=<zoom>&x=<x>&y=<y>&altitude=<altitude>
+  // http://localhost:8777/compute?input=<input>&output1=<output1>&output2=<output2>&zoom=<zoom>&x=<x>&y=<y>&altitude=<altitude>
   def compute = {
     get({
-      parameters('input, 'output, 'zoom, 'x, 'y, 'altitude)({ (input, output, zoom, x, y, altitude) => {
+      parameters('terrain, 'output1, 'output2, 'zoom, 'x, 'y, 'altitude)({ (terrain, output1, output2, zoom, x, y, altitude) => {
         val reader = dataModel.reader
         val writer = dataModel.writer
         val tr = new Thread(new Runnable() {
           override def run(): Unit =
-            Compute.compute(reader, writer, input, output, zoom.toInt, x.toDouble, y.toDouble, altitude.toDouble)
+            Compute.compute(
+              sparkContext,
+              reader, writer, attributeStore,
+              terrain, output1, output2, zoom.toInt,
+              x.toDouble, y.toDouble, altitude.toDouble
+            )
         })
 
         tr.start
-        complete(JsObject(
-          "observer" -> JsString(s"${output}-observer"),
-          "craft" -> JsString(s"${output}-craft")))
+        complete("ok")
       }})
     })
   }
@@ -110,14 +127,14 @@ class DemoServiceActor(sparkContext: SparkContext, dataModel: DataModel)
   def poll = {
     get({
       parameters('name)({ (name) => {
-        val done: Boolean = try {
-          attributeStore.read[Boolean](LayerId(name, 0), "done")
+        val millis: Long = try {
+          attributeStore.read[Int](LayerId(name, 0), "millis")
         }
         catch {
-          case  e: Exception => false
+          case  e: Exception => -1
         }
 
-        complete(JsObject("done" -> JsBoolean(done)))
+        complete(JsObject("millis" -> JsNumber(millis)))
       }})
     })
   }
