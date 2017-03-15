@@ -36,6 +36,7 @@ import geotrellis.vector.io.json.Implicits._
 import geotrellis.vector.reproject._
 
 import akka.actor._
+import org.apache.log4j.Logger
 import org.apache.spark.{SparkConf, SparkContext}
 import spray.http._
 import spray.httpx.SprayJsonSupport._
@@ -50,41 +51,111 @@ import scala.concurrent.Future
 
 object Compute {
 
-  def compute(
+  val logger = Logger.getLogger(Compute.getClass)
+  val layoutScheme = ZoomedLayoutScheme(WebMercator, 256)
+
+  val z = 0.0
+  val angle = 0.0
+  val fov = -1.0
+
+  /**
+    *
+    */
+  def observer(
     sparkContext: SparkContext,
     reader: FilteringLayerReader[LayerId], writer: LayerWriter[LayerId], as: AttributeStore,
-    terrainName: String, output1: String, output2: String, zoom: Int,
+    terrainName: String, output: String, zoom: Int,
     x: Double, y: Double, altitude: Double
   ): Unit = {
     implicit val sc = sparkContext
     val terrainId = LayerId(terrainName, zoom)
+    val outputId = LayerId(output, 0)
     val terrain = reader.read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](terrainId)
-    val layoutScheme = ZoomedLayoutScheme(WebMercator, 256)
-
-    val z = 0.0
-    val angle = 0.0
-    val fov = -1.0
-
     val touched = mutable.Set.empty[SpatialKey]
+    val point: Array[Double] = Array(x, y, z, angle, fov, altitude)
+    val before = System.currentTimeMillis
+    val src = IterativeViewshed(
+      terrain, List(point),
+      maxDistance = 100000,
+      curvature = true,
+      operator = R2Viewshed.Or(),
+      touched = touched)
+    logger.info(s"Source observer viewshed computed")
+    Pyramid.upLevels(src, layoutScheme, zoom, 1)({ (rdd, zoom) =>
+      logger.info(s"Level $zoom observer viewshed computed")
+      writer.write(LayerId(output, zoom), rdd, ZCurveKeyIndexMethod) })
+    val after = System.currentTimeMillis
+    val millis = after - before
+    logger.info(s"Observer viewshed computed in $millis ms, ${touched.size} tiles touched")
 
-    {
-      val point: Array[Double] = Array(x, y, z, angle, fov, altitude)
-      val before = System.currentTimeMillis
-      val src = IterativeViewshed(
-        terrain, List(point),
-        maxDistance = 100000,
-        curvature = true,
-        operator = R2Viewshed.Or(),
-        touched = touched)
-      Pyramid.upLevels(src, layoutScheme, zoom, 1)({ (rdd, zoom) =>
-        writer.write(LayerId(output1, zoom), rdd, ZCurveKeyIndexMethod) })
-      val after = System.currentTimeMillis
-      val millis = after - before
-      as.write(LayerId(output1, 0), "millis", millis)
-    }
-
-
+    as.write(outputId, "altitude", altitude)
+    as.write(outputId, "touched", touched.toList)
+    as.write(outputId, "millis", millis)
   }
+
+  private def combine(
+    a: mutable.ArrayBuffer[Array[Double]],
+    b: mutable.ArrayBuffer[Array[Double]]) = {
+    a ++ b
+  }
+
+  /**
+    *
+    */
+  def craft(
+    sparkContext: SparkContext,
+    reader: FilteringLayerReader[LayerId], writer: LayerWriter[LayerId], as: AttributeStore,
+    terrainName: String, observerName: String, output: String, zoom: Int
+  ): Unit = {
+    implicit val sc = sparkContext
+    val factor = 4
+    val terrainId = LayerId(terrainName, zoom)
+    val terrain = reader.read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](terrainId)
+    val observerId0 = LayerId(observerName, 0)
+    val observerIdZ = LayerId(observerName, zoom)
+    val observer = reader.read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](observerIdZ)
+    val outputId = LayerId(output, 0)
+    val altitude = as.read[Double](observerId0, "altitude")
+    val touched = as.read[List[SpatialKey]](observerId0, "touched").toSet
+    val mt = observer.metadata.mapTransform
+    val points: Seq[Array[Double]] = {
+      observer
+        .filter({ case (k, _) => touched.contains(k) })
+        .map({ case (k, v) =>
+          val extent = mt(k)
+          val cols = v.cols
+          val rows = v.rows
+          val re = RasterExtent(extent, cols, rows)
+          val points = mutable.ArrayBuffer.empty[Array[Double]]
+
+          v.foreach({ (col, row, z) =>
+            if (isData(z) && (col % factor == 0) && (row % factor == 0) && (z > 0)) {
+              val (x, y) = re.gridToMap(col, row)
+              points.append(Array(x, y, altitude, 0.0, -1.0, Double.NegativeInfinity))
+            }})
+          points })
+        .aggregate(mutable.ArrayBuffer.empty[Array[Double]])(combine, combine)
+    }
+    logger.info(s"${points.length} points")
+    val before = System.currentTimeMillis
+    val src = IterativeViewshed(
+      terrain, points,
+      maxDistance = 100000,
+      curvature = true,
+      operator = R2Viewshed.Plus()
+    )
+    logger.info(s"Source craft viewshed computed")
+    Pyramid.upLevels(src, layoutScheme, zoom, 1)({ (rdd, zoom) =>
+      logger.info(s"Level $zoom craft viewshed computed")
+      writer.write(LayerId(output, zoom), rdd, ZCurveKeyIndexMethod) })
+    val after = System.currentTimeMillis
+    val millis = after - before
+    logger.info(s"Craft viewshed computed in $millis ms")
+
+    as.write(outputId, "histogram", src.histogram())
+    as.write(outputId, "millis", millis)
+  }
+
 }
 
 class DemoServiceActor(sparkContext: SparkContext, dataModel: DataModel)
@@ -98,22 +169,44 @@ class DemoServiceActor(sparkContext: SparkContext, dataModel: DataModel)
 
   def serviceRoute =
     pathPrefix("tms")(tms) ~
-  pathPrefix("poll")(poll) ~
-  pathPrefix("compute")(compute)
+    pathPrefix("poll")(poll) ~
+    pathPrefix("observer")(observer) ~
+    pathPrefix("craft")(craft)
 
-  // http://localhost:8777/compute?input=<input>&output1=<output1>&output2=<output2>&zoom=<zoom>&x=<x>&y=<y>&altitude=<altitude>
-  def compute = {
+  // http://localhost:8777/observer?terrain=<terrain>&output=<output>&zoom=<zoom>&x=<x>&y=<y>&altitude=<altitude>
+  def observer = {
     get({
-      parameters('terrain, 'output1, 'output2, 'zoom, 'x, 'y, 'altitude)({ (terrain, output1, output2, zoom, x, y, altitude) => {
+      parameters('terrain, 'output, 'zoom, 'x, 'y, 'altitude)({ (terrain, output, zoom, x, y, altitude) => {
         val reader = dataModel.reader
         val writer = dataModel.writer
         val tr = new Thread(new Runnable() {
           override def run(): Unit =
-            Compute.compute(
+            Compute.observer(
               sparkContext,
               reader, writer, attributeStore,
-              terrain, output1, output2, zoom.toInt,
+              terrain, output, zoom.toInt,
               x.toDouble, y.toDouble, altitude.toDouble
+            )
+        })
+
+        tr.start
+        complete("ok")
+      }})
+    })
+  }
+
+  // http://localhost:8777/craft?terrain=<terrain>&observer=<observer>&output=<output>&zoom=<zoom>
+  def craft = {
+    get({
+      parameters('terrain, 'observer, 'output, 'zoom)({ (terrain, observer, output, zoom) => {
+        val reader = dataModel.reader
+        val writer = dataModel.writer
+        val tr = new Thread(new Runnable() {
+          override def run(): Unit =
+            Compute.craft(
+              sparkContext,
+              reader, writer, attributeStore,
+              terrain, observer, output, zoom.toInt
             )
         })
 
@@ -134,7 +227,7 @@ class DemoServiceActor(sparkContext: SparkContext, dataModel: DataModel)
           case  e: Exception => -1
         }
 
-        complete(JsObject("millis" -> JsNumber(millis)))
+        complete(if (millis > -1) "ok"; else "no")
       }})
     })
   }
