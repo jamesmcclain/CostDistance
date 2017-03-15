@@ -166,6 +166,7 @@ class DemoServiceActor(sparkContext: SparkContext, dataModel: DataModel)
 
   val attributeStore = dataModel.attributeStore
   val tileReader = dataModel.tileReader
+  val breaksMap = mutable.Map.empty[String, Array[Double]]
 
   def serviceRoute =
     pathPrefix("tms")(tms) ~
@@ -241,17 +242,21 @@ class DemoServiceActor(sparkContext: SparkContext, dataModel: DataModel)
           val tile = tileReader
             .reader[SpatialKey, Tile](LayerId(pyramidName, zoom))
             .read(key)
-          val histogram: StreamingHistogram = try {
-            attributeStore
-              .read[Histogram[Double]](LayerId(pyramidName, 0), "histogram")
-              .asInstanceOf[StreamingHistogram]
-          }
-          catch {
-            case e: Exception =>
-              val sh = StreamingHistogram()
-              sh.countItem(item = 1.0, count = 1); sh
-          }
-          val breaks = histogram.quantileBreaks(1<<8)
+          val breaks: Array[Double] = breaksMap.getOrElse(pyramidName, breaksMap.synchronized {
+            val histogram = try {
+              attributeStore
+                .read[Histogram[Double]](LayerId(pyramidName, 0), "histogram")
+                .asInstanceOf[StreamingHistogram]
+            }
+            catch {
+              case e: Exception =>
+                val sh = StreamingHistogram()
+                sh.countItem(item = 1.0, count = 1); sh
+            }
+            val breaks = histogram.quantileBreaks(1<<8)
+            breaksMap += ((pyramidName, breaks))
+            breaks
+          })
           val ramp = ColorRampMap.getOrElse(colorRamp, ColorRamps.BlueToRed).toColorMap(breaks)
           val bytes: Array[Byte] = tile.renderPng(ramp).bytes
 
