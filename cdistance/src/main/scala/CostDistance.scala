@@ -78,7 +78,11 @@ object CostDistance {
       val points = args.drop(7)
         .grouped(6)
         .toList
-        .map({ case ar: Array[String] if (ar.length == 6) => ar.map(_.toDouble) })
+        .map({ case _ar: Array[String] if (_ar.length == 6) =>
+          val ar = _ar.map(_.toDouble)
+          if (ar(5) == 0) ar(5) = Double.NegativeInfinity
+          ar
+        })
 
       logger.debug(s"Viewshed: catalog=$catalog input=$readId output=$writeId maxDistance=$maxDistance op=$op points=${points.map(_.toList)}")
 
