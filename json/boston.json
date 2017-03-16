@@ -1,0 +1,9 @@
+[{
+    "format": "geotiff",
+    "name": "boston",
+    "cache": "NONE",
+    "backend": {
+        "type": "hadoop",
+        "path": "file:///tmp/boston_lidar.tif"
+    }
+}]
