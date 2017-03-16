@@ -57,6 +57,7 @@ object CostDistance {
       .setAppName("Cost-Distance")
       .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
       .set("spark.kryo.registrator", "geotrellis.spark.io.kryo.KryoRegistrator")
+      .set("spark.kryo.unsafe", "true")
       .set("spark.rdd.compress", "true")
     val sparkContext = new SparkContext(sparkConf)
     implicit val sc = sparkContext
@@ -77,7 +78,11 @@ object CostDistance {
       val points = args.drop(7)
         .grouped(6)
         .toList
-        .map({ case ar: Array[String] if (ar.length == 6) => ar.map(_.toDouble) })
+        .map({ case _ar: Array[String] if (_ar.length == 6) =>
+          val ar = _ar.map(_.toDouble)
+          if (ar(5) == 0) ar(5) = Double.NegativeInfinity
+          ar
+        })
 
       logger.debug(s"Viewshed: catalog=$catalog input=$readId output=$writeId maxDistance=$maxDistance op=$op points=${points.map(_.toList)}")
 

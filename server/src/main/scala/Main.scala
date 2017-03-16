@@ -30,19 +30,18 @@ object Main {
 
   def main(args: Array[String]): Unit = {
 
-    val sparkConf = (new SparkConf()).setAppName("TMS Server")
+    val sparkConf = (new SparkConf())
+      .setAppName("Demo Server")
+      .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+      .set("spark.kryo.registrator", "geotrellis.spark.io.kryo.KryoRegistrator")
+      .set("spark.kryo.unsafe", "true")
+      .set("spark.rdd.compress", "true")
     val sparkContext = new SparkContext(sparkConf)
     implicit val sc = sparkContext
 
     val config = ConfigFactory.load()
     val port = config.getInt("geotrellis.port")
     val host = config.getString("geotrellis.hostname")
-    val histogramId =
-      if (args.length > 2) LayerId(args(0), args(1).toInt)
-      else LayerId(config.getString("geotrellis.hname"), config.getInt("geotrellis.hzoom"))
-    val pyramidName =
-      if (args.length > 3) args(2)
-      else config.getString("geotrellis.pyramid")
 
     implicit val system = ActorSystem("tms-server")
 
@@ -50,7 +49,7 @@ object Main {
 
     // create and start our service actor
     val service = {
-      val actorProps = Props(classOf[DemoServiceActor], pyramidName, histogramId, dataModel)
+      val actorProps = Props(classOf[DemoServiceActor], sparkContext, dataModel)
       system.actorOf(actorProps, "tms-server")
     }
 

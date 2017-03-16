@@ -30,9 +30,9 @@ import org.apache.spark.SparkContext
 
 
 class DataModel(config: Config)(implicit val sc: SparkContext) {
-  val (tileReader, attributeStore) = {
+  val (tileReader, attributeStore, reader, writer) = {
     val path = config.getString("hadoop.path")
-    val attributeStore = HadoopAttributeStore(path)
-    (HadoopValueReader(attributeStore), attributeStore)
+    val as = HadoopAttributeStore(path)
+    (HadoopValueReader(as), as, HadoopLayerReader(as), HadoopLayerWriter(as.rootPath, as))
   }
 }

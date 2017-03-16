@@ -6,7 +6,7 @@ libraryDependencies ++= Seq(
   "io.spray"                    %% "spray-routing"    % "1.3.3",
   "org.locationtech.geotrellis" %% "geotrellis-spark" % "1.0.0-SNAPSHOT",
   "org.apache.hadoop"            % "hadoop-client"    % Version.hadoop % "provided",
-  "org.apache.spark"            %% "spark-core"       % Version.spark % "provided"
+  "org.apache.spark"            %% "spark-core"       % Version.spark  % "provided"
 ).map({ _ exclude("com.google.guava", "guava")})
 
 fork in Test := false
