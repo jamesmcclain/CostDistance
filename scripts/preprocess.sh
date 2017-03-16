@@ -19,7 +19,7 @@ $SPARK_HOME/bin/spark-submit \
    --master 'local[*]' \
    --driver-memory 16G \
    cdistance/target/scala-2.11/cdistance-assembly-0.jar \
-   'file:///tmp/hdfs-catalog' histogram cost $ZOOM
+   'file:///tmp/hdfs-catalog' histogram cost $ZOOM cost-pyramid 0
 
 $SPARK_HOME/bin/spark-submit \
    --master 'local[*]' \

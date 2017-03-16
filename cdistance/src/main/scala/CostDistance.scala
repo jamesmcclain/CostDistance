@@ -183,15 +183,15 @@ object CostDistance {
     }
     // HISTOGRAM
     else if (operation == "histogram") {
-      val layerName = args(2)
-      val id = LayerId(layerName, args(3).toInt)
+      val id1 = LayerId(args(2), args(3).toInt)
+      val id2 = LayerId(args(4), args(5).toInt)
       val attributeStore = HadoopAttributeStore(catalog)
       val layer =
         HadoopLayerReader(catalog)
-          .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](id)
+          .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](id1)
 
-      logger.debug(s"Histogram: catalog=$catalog input=$id")
-      attributeStore.write(id, "histogram", layer.histogram())
+      logger.debug(s"Histogram: catalog=$catalog input=$id1 output=$id2")
+      attributeStore.write(id2, "histogram", layer.histogram())
     }
     // ANY OTHER COMMAND
     else logger.debug(s"Unknown Operaton: $operation")
