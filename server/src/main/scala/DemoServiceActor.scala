@@ -80,13 +80,14 @@ object Compute {
       curvature = true,
       operator = R2Viewshed.Or(),
       touched = touched)
-    logger.info(s"Source observer viewshed computed")
+    val after1 = System.currentTimeMillis
+    logger.info(s"Observer viewshed computed in ${after1 - before} ms, ${touched.size} tiles touched")
     Pyramid.upLevels(src, layoutScheme, zoom, 1)({ (rdd, zoom) =>
-      logger.info(s"Level $zoom observer viewshed computed")
+      logger.info(s"Level $zoom observer viewshed stored")
       writer.write(LayerId(output, zoom), rdd, ZCurveKeyIndexMethod) })
-    val after = System.currentTimeMillis
-    val millis = after - before
-    logger.info(s"Observer viewshed computed in $millis ms, ${touched.size} tiles touched")
+    val after2 = System.currentTimeMillis
+    val millis = after2 - before
+    logger.info(s"Observer viewshed+pyramid computed in $millis ms")
 
     as.write(outputId, "altitude", altitude)
     as.write(outputId, "touched", touched.toList)
@@ -108,7 +109,6 @@ object Compute {
     terrainName: String, observerName: String, output: String, zoom: Int
   ): Unit = {
     implicit val sc = sparkContext
-    val factor = 4
     val terrainId = LayerId(terrainName, zoom)
     val terrain = reader.read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](terrainId)
     val observerId0 = LayerId(observerName, 0)
@@ -129,7 +129,7 @@ object Compute {
           val points = mutable.ArrayBuffer.empty[Array[Double]]
 
           v.foreach({ (col, row, z) =>
-            if (isData(z) && (col % factor == 0) && (row % factor == 0) && (z > 0)) {
+            if (isData(z) && (col % 3 == 0) && (row % 5 == 0) && (z > 0)) {
               val (x, y) = re.gridToMap(col, row)
               points.append(Array(x, y, altitude, 0.0, -1.0, Double.NegativeInfinity))
             }})
@@ -144,15 +144,16 @@ object Compute {
       curvature = true,
       operator = R2Viewshed.Plus()
     )
-    logger.info(s"Source craft viewshed computed")
+    val after1 = System.currentTimeMillis
+    logger.info(s"Craft viewshed computed in ${after1 - before} ms")
     Pyramid.upLevels(src, layoutScheme, zoom, 1)({ (rdd, zoom) =>
-      logger.info(s"Level $zoom craft viewshed computed")
+      logger.info(s"Level $zoom craft viewshed stored")
       writer.write(LayerId(output, zoom), rdd, ZCurveKeyIndexMethod) })
-    val after = System.currentTimeMillis
-    val millis = after - before
-    logger.info(s"Craft viewshed computed in $millis ms")
+    val after2 = System.currentTimeMillis
+    val millis = after2 - before
+    logger.info(s"Craft viewshed+pyramid computed in $millis ms")
 
-    as.write(outputId, "histogram", src.histogram())
+    as.write(outputId, "points", points.length)
     as.write(outputId, "millis", millis)
   }
 
@@ -243,19 +244,25 @@ class DemoServiceActor(sparkContext: SparkContext, dataModel: DataModel)
             .reader[SpatialKey, Tile](LayerId(pyramidName, zoom))
             .read(key)
           val breaks: Array[Double] = breaksMap.getOrElse(pyramidName, breaksMap.synchronized {
-            val histogram = try {
-              attributeStore
+
+            val histogram: Option[StreamingHistogram] = try { // fetch histogram (if possible)
+              val histogram: StreamingHistogram = attributeStore
                 .read[Histogram[Double]](LayerId(pyramidName, 0), "histogram")
                 .asInstanceOf[StreamingHistogram]
+              Some(histogram)
+            } catch { case e: Exception => None }
+
+            val breaks: Array[Double] = histogram match { // compute breaks
+              case Some(histogram) => histogram.quantileBreaks(1<<8)
+              case None =>
+                try {
+                  val points = attributeStore.read[Int](LayerId(pyramidName, 0), "points")
+                  (0 to points).map(_.toDouble).toArray
+                } catch { case e: Exception => Array[Double](0.0, 1.0) }
             }
-            catch {
-              case e: Exception =>
-                val sh = StreamingHistogram()
-                sh.countItem(item = 1.0, count = 1); sh
-            }
-            val breaks = histogram.quantileBreaks(1<<8)
-            breaksMap += ((pyramidName, breaks))
-            breaks
+
+            breaksMap += ((pyramidName, breaks)) // remember breaks
+            breaks // return breaks
           })
           val ramp = ColorRampMap.getOrElse(colorRamp, ColorRamps.BlueToRed).toColorMap(breaks)
           val bytes: Array[Byte] = tile.renderPng(ramp).bytes
