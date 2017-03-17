@@ -111,9 +111,12 @@ object CostDistance {
       val outputLayerName = args(4)
       val size = args(5).toInt
       val readId = LayerId(args(2), inputZoom)
-      val src =
+      val _src =
         HadoopLayerReader(catalog)
           .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](readId)
+      val src =
+        if (_src.partitions.length >= (1<<7)) _src
+        else ContextRDD(_src.repartition((1<<7)), _src.metadata)
       val layoutScheme = ZoomedLayoutScheme(WebMercator, size)
 
       logger.debug(s"Pyramid: catalog=$catalog input=$readId ${size}×${size} tiles")
@@ -183,15 +186,15 @@ object CostDistance {
     }
     // HISTOGRAM
     else if (operation == "histogram") {
-      val layerName = args(2)
-      val id = LayerId(layerName, args(3).toInt)
+      val id1 = LayerId(args(2), args(3).toInt)
+      val id2 = LayerId(args(4), args(5).toInt)
       val attributeStore = HadoopAttributeStore(catalog)
       val layer =
         HadoopLayerReader(catalog)
-          .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](id)
+          .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](id1)
 
-      logger.debug(s"Histogram: catalog=$catalog input=$id")
-      attributeStore.write(id, "histogram", layer.histogram())
+      logger.debug(s"Histogram: catalog=$catalog input=$id1 output=$id2")
+      attributeStore.write(id2, "histogram", layer.histogram())
     }
     // ANY OTHER COMMAND
     else logger.debug(s"Unknown Operaton: $operation")
