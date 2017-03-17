@@ -111,9 +111,12 @@ object CostDistance {
       val outputLayerName = args(4)
       val size = args(5).toInt
       val readId = LayerId(args(2), inputZoom)
-      val src =
+      val _src =
         HadoopLayerReader(catalog)
           .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](readId)
+      val src =
+        if (_src.partitions.length >= (1<<7)) _src
+        else ContextRDD(_src.repartition((1<<7)), _src.metadata)
       val layoutScheme = ZoomedLayoutScheme(WebMercator, size)
 
       logger.debug(s"Pyramid: catalog=$catalog input=$readId ${size}×${size} tiles")
