@@ -16,12 +16,15 @@
 
 package com.example.server
 
+import geotrellis.proj4.{LatLng, WebMercator}
 import geotrellis.raster._
 import geotrellis.raster.histogram._
 import geotrellis.raster.io._
 import geotrellis.raster.render._
 import geotrellis.spark._
 import geotrellis.spark.io._
+import geotrellis.vector._
+import geotrellis.vector.io._
 
 import akka.actor._
 import org.apache.log4j.Logger
@@ -51,7 +54,8 @@ class DemoServiceActor(sparkContext: SparkContext, dataModel: DataModel)
     pathPrefix("tms")(tms) ~
     pathPrefix("poll")(poll) ~
     pathPrefix("observer")(observer) ~
-    pathPrefix("craft")(craft)
+    pathPrefix("craft")(craft) ~
+    pathPrefix("polygon")(polygon)
 
   // http://localhost:8777/observer?terrain=<terrain>&output=<output>&zoom=<zoom>&x=<x>&y=<y>&altitude=<altitude>
   def observer = {
@@ -64,7 +68,9 @@ class DemoServiceActor(sparkContext: SparkContext, dataModel: DataModel)
             override def run(): Unit =
               Compute.observer(
                 sparkContext,
-                reader, writer, attributeStore,
+                reader = reader,
+                writer = writer,
+                attributeStore = attributeStore,
                 terrain, output, zoom.toInt,
                 x.toDouble, y.toDouble, altitude.toDouble,
                 maxDistance match {
@@ -106,6 +112,50 @@ class DemoServiceActor(sparkContext: SparkContext, dataModel: DataModel)
 
           tr.start
           complete("ok")
+        }})
+    })
+  }
+
+  // http://localhost:8777/polygon?terrain=<terrain>&output=<output>&zoom=<zoom>
+  def polygon = {
+    post({
+      parameters('terrain, 'altitude, 'output, 'zoom, 'maxDistance ?)(
+        { (terrain, altitude, output, zoom, maxDistance) => {
+          entity(as[String])({ json =>
+            respondWithHeader(HttpHeaders.RawHeader("Access-Control-Allow-Origin","*"))({
+              val rawGeometry =
+                try { json.parseJson.convertTo[Geometry] }
+                catch { case e: Exception => throw new Exception }
+              val geometry = rawGeometry match {
+                case p: Polygon => MultiPolygon(p.reproject(LatLng, WebMercator))
+                case mp: MultiPolygon => mp.reproject(LatLng, WebMercator)
+                case _ => throw new Exception
+              }
+              val reader = dataModel.reader
+              val writer = dataModel.writer
+              val tr = new Thread(new Runnable() {
+                override def run(): Unit =
+                  Compute.polygon(
+                    sparkContext,
+                    reader = reader,
+                    writer = writer,
+                    attributeStore = attributeStore,
+                    terrainName = terrain,
+                    geometry = geometry,
+                    altitude = altitude.toDouble,
+                    outputName = output,
+                    zoom = zoom.toInt,
+                    maxDistance = (maxDistance match {
+                      case Some(d) => d.toDouble
+                      case None => 144000.0
+                    })
+                  )
+              })
+
+              tr.start
+              complete("ok")
+            })
+          })
         }})
     })
   }

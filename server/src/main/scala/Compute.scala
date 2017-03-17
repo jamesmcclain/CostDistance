@@ -18,6 +18,7 @@ package com.example.server
 
 import geotrellis.proj4.WebMercator
 import geotrellis.raster._
+import geotrellis.raster.rasterize.Rasterizer
 import geotrellis.raster.viewshed.R2Viewshed
 import geotrellis.spark._
 import geotrellis.spark.io._
@@ -25,6 +26,7 @@ import geotrellis.spark.io.index._
 import geotrellis.spark.pyramid.Pyramid
 import geotrellis.spark.tiling.ZoomedLayoutScheme
 import geotrellis.spark.viewshed._
+import geotrellis.vector._
 
 import org.apache.log4j.Logger
 import org.apache.spark.{SparkConf, SparkContext}
@@ -49,8 +51,12 @@ object Compute {
     */
   def observer(
     sparkContext: SparkContext,
-    reader: FilteringLayerReader[LayerId], writer: LayerWriter[LayerId], as: AttributeStore,
-    terrainName: String, output: String, zoom: Int,
+    reader: FilteringLayerReader[LayerId],
+    writer: LayerWriter[LayerId],
+    attributeStore: AttributeStore,
+    terrainName: String,
+    outputName: String,
+    zoom: Int,
     x: Double, y: Double, altitude: Double,
     maxDistance: Double
   ): Unit = {
@@ -60,7 +66,7 @@ object Compute {
     val terrain =
       if (_terrain.partitions.length >= (1<<7)) _terrain
       else ContextRDD(_terrain.repartition((1<<7)), _terrain.metadata)
-    val outputId = LayerId(output, 0)
+    val outputId = LayerId(outputName, 0)
     val touched = mutable.Set.empty[SpatialKey]
     val point: Array[Double] = Array(x, y, zee, angle, fov, altitude)
     val before = System.currentTimeMillis
@@ -73,16 +79,17 @@ object Compute {
     )
     val after1 = System.currentTimeMillis
     logger.info(s"Observer viewshed computed in ${after1 - before} ms, ${touched.size} tiles touched")
+
     Pyramid.upLevels(src, layoutScheme, zoom, 1)({ (rdd, zoom) =>
       logger.info(s"Level $zoom observer viewshed stored")
-      writer.write(LayerId(output, zoom), rdd, ZCurveKeyIndexMethod) })
+      writer.write(LayerId(outputName, zoom), rdd, ZCurveKeyIndexMethod) })
     val after2 = System.currentTimeMillis
     val millis = after2 - before
     logger.info(s"Observer viewshed+pyramid computed in $millis ms")
 
-    as.write(outputId, "altitude", altitude)
-    as.write(outputId, "touched", touched.toList)
-    as.write(outputId, "millis", millis)
+    attributeStore.write(outputId, "altitude", altitude)
+    attributeStore.write(outputId, "touched", touched.toList)
+    attributeStore.write(outputId, "millis", millis)
   }
 
   private def combine(
@@ -96,9 +103,15 @@ object Compute {
     */
   def craft(
     sparkContext: SparkContext,
-    reader: FilteringLayerReader[LayerId], writer: LayerWriter[LayerId], as: AttributeStore,
-    terrainName: String, observerName: String, output: String, zoom: Int,
-    maxDistance: Double, magic: Int
+    reader: FilteringLayerReader[LayerId],
+    writer: LayerWriter[LayerId],
+    attributeStore: AttributeStore,
+    terrainName: String,
+    observerName: String,
+    outputName: String,
+    zoom: Int,
+    maxDistance: Double,
+    magic: Int
   ): Unit = {
     implicit val sc = sparkContext
     val terrainId = LayerId(terrainName, zoom)
@@ -112,13 +125,14 @@ object Compute {
     val observer =
       if (_observer.partitions.length >= (1<<7)) _observer
       else ContextRDD(_observer.repartition((1<<7)), _observer.metadata)
-    val outputId = LayerId(output, 0)
-    val altitude = as.read[Double](observerId0, "altitude")
-    val touched = as
+    val outputId = LayerId(outputName, 0)
+    val altitude = attributeStore.read[Double](observerId0, "altitude")
+    val touched = attributeStore
       .read[List[SpatialKey]](observerId0, "touched")
       .map({ k => SpatialKey(k.col >> magic, k.row >> magic) })
       .toSet
     val mt = observer.metadata.mapTransform
+
     val points: Seq[Array[Double]] = {
       observer
         .filter({ case (k, _) => touched.contains(k) })
@@ -149,6 +163,7 @@ object Compute {
         .aggregate(mutable.ArrayBuffer.empty[Array[Double]])(combine, combine)
     }
     logger.info(s"${points.length} points")
+
     val before = System.currentTimeMillis
     val src = IterativeViewshed(
       terrain, points,
@@ -158,15 +173,70 @@ object Compute {
     )
     val after1 = System.currentTimeMillis
     logger.info(s"Craft viewshed computed in ${after1 - before} ms")
+
     Pyramid.upLevels(src, layoutScheme, zoom, 1)({ (rdd, zoom) =>
       logger.info(s"Level $zoom craft viewshed stored")
-      writer.write(LayerId(output, zoom), rdd, ZCurveKeyIndexMethod) })
+      writer.write(LayerId(outputName, zoom), rdd, ZCurveKeyIndexMethod) })
     val after2 = System.currentTimeMillis
     val millis = after2 - before
     logger.info(s"Craft viewshed+pyramid computed in $millis ms")
 
-    // as.write(outputId, "points", points.length)
-    as.write(outputId, "millis", millis)
+    // attributeStore.write(outputId, "points", points.length)
+    attributeStore.write(outputId, "millis", millis)
+  }
+
+  /**
+    *
+    */
+  def polygon(
+    sparkContext: SparkContext,
+    reader: FilteringLayerReader[LayerId],
+    writer: LayerWriter[LayerId],
+    attributeStore: AttributeStore,
+    terrainName: String,
+    geometry: MultiPolygon,
+    altitude: Double,
+    outputName: String,
+    zoom: Int,
+    maxDistance: Double
+  ): Unit = {
+    implicit val sc = sparkContext
+    val terrainId = LayerId(terrainName, zoom)
+    val _terrain = reader.read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](terrainId)
+    val terrain =
+      if (_terrain.partitions.length >= (1<<7)) _terrain
+      else ContextRDD(_terrain.repartition((1<<7)), _terrain.metadata)
+    val outputId = LayerId(outputName, 0)
+    val alt = altitude.toDouble
+    val b = geometry.boundary.toGeometry.get
+    val re = RasterExtent(geometry.envelope, 512, 512)
+    val o = Rasterizer.Options.DEFAULT
+
+    val points = mutable.ArrayBuffer.empty[Array[Double]]
+    Rasterizer.foreachCellByGeometry(b, re, o)({ (col, row) =>
+      val (x, y) = re.gridToMap(col, row)
+      points.append(Array(x, y, alt, 0.0, -1.0, Double.NegativeInfinity))
+    })
+
+    logger.info(s"${points.length} points")
+    val before = System.currentTimeMillis
+    val src = IterativeViewshed(
+      terrain, points,
+      maxDistance = maxDistance,
+      curvature = true,
+      operator = R2Viewshed.Or()
+    )
+    val after1 = System.currentTimeMillis
+    logger.info(s"Craft viewshed computed in ${after1 - before} ms")
+
+    Pyramid.upLevels(src, layoutScheme, zoom, 1)({ (rdd, zoom) =>
+      logger.info(s"Level $zoom craft viewshed stored")
+      writer.write(LayerId(outputName, zoom), rdd, ZCurveKeyIndexMethod) })
+    val after2 = System.currentTimeMillis
+    val millis = after2 - before
+    logger.info(s"Craft viewshed+pyramid computed in $millis ms")
+
+    attributeStore.write(outputId, "millis", millis)
   }
 
 }
