@@ -41,7 +41,8 @@ object Compute {
   private val layoutScheme = ZoomedLayoutScheme(WebMercator, 256)
 
   /**
-    *
+    * Compute the viewshed for an observer at ground level at the
+    * given place w.r.t. objects at the given altitude.
     */
   def observer(
     sparkContext: SparkContext,
@@ -96,7 +97,8 @@ object Compute {
   }
 
   /**
-    *
+    * Compute the viewshed for the aircraft; the craft's possible
+    * locations and altitute are given as layer data and metadata.
     */
   def craft(
     sparkContext: SparkContext,
@@ -181,7 +183,9 @@ object Compute {
   }
 
   /**
-    *
+    * Compute the viewshed for the aircraft; the craft's possible
+    * locations are given as a polygon and its altitude is given as a
+    * parameter.
     */
   def polygon(
     sparkContext: SparkContext,
