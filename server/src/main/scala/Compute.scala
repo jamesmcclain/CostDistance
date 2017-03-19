@@ -19,13 +19,12 @@ package com.example.server
 import geotrellis.proj4.WebMercator
 import geotrellis.raster._
 import geotrellis.raster.rasterize.Rasterizer
-import geotrellis.raster.viewshed.R2Viewshed
 import geotrellis.spark._
 import geotrellis.spark.io._
 import geotrellis.spark.io.index._
 import geotrellis.spark.pyramid.Pyramid
 import geotrellis.spark.tiling.ZoomedLayoutScheme
-import geotrellis.spark.viewshed._
+import geotrellis.spark.viewshed.IterativeViewshed.Point6D
 import geotrellis.vector._
 
 import org.apache.log4j.Logger
@@ -41,11 +40,6 @@ object Compute {
   private val logger = Logger.getLogger(Compute.getClass)
   private val layoutScheme = ZoomedLayoutScheme(WebMercator, 256)
 
-  private val zee = 0.0
-  private val angle = 0.0
-  private val fov = -1.0
-
-
   /**
     *
     */
@@ -60,6 +54,10 @@ object Compute {
     x: Double, y: Double, altitude: Double,
     maxDistance: Double
   ): Unit = {
+    val zee = 0.0
+    val angle = 0.0
+    val fov = -1.0
+
     implicit val sc = sparkContext
     val terrainId = LayerId(terrainName, zoom)
     val _terrain = reader.read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](terrainId)
@@ -68,14 +66,13 @@ object Compute {
       else ContextRDD(_terrain.repartition((1<<7)), _terrain.metadata)
     val outputId = LayerId(outputName, 0)
     val touched = mutable.Set.empty[SpatialKey]
-    val point: Array[Double] = Array(x, y, zee, angle, fov, altitude)
+    val point: Point6D = Array(x, y, zee, angle, fov, altitude)
+
     val before = System.currentTimeMillis
-    val src = IterativeViewshed(
-      terrain, List(point),
+    val src = terrain.viewshed(
+      points = List(point),
       maxDistance = maxDistance,
-      curvature = true,
-      operator = R2Viewshed.Or(),
-      touched = touched
+      touchedKeys = touched
     )
     val after1 = System.currentTimeMillis
     logger.info(s"Observer viewshed computed in ${after1 - before} ms, ${touched.size} tiles touched")
@@ -93,8 +90,8 @@ object Compute {
   }
 
   private def combine(
-    a: mutable.ArrayBuffer[Array[Double]],
-    b: mutable.ArrayBuffer[Array[Double]]) = {
+    a: mutable.ArrayBuffer[Point6D],
+    b: mutable.ArrayBuffer[Point6D]) = {
     a ++ b
   }
 
@@ -133,7 +130,7 @@ object Compute {
       .toSet
     val mt = observer.metadata.mapTransform
 
-    val points: Seq[Array[Double]] = {
+    val points: Seq[Point6D] = {
       observer
         .filter({ case (k, _) => touched.contains(k) })
         .map({ case (k, v) =>
@@ -141,7 +138,7 @@ object Compute {
           val cols = v.cols
           val rows = v.rows
           val re = RasterExtent(extent, cols, rows)
-          val points = mutable.ArrayBuffer.empty[Array[Double]]
+          val points = mutable.ArrayBuffer.empty[Point6D]
 
           v.foreach({ (col1, row1, z1) =>
             var boundary = false
@@ -160,16 +157,14 @@ object Compute {
               }
             }})
           points })
-        .aggregate(mutable.ArrayBuffer.empty[Array[Double]])(combine, combine)
+        .aggregate(mutable.ArrayBuffer.empty[Point6D])(combine, combine)
     }
     logger.info(s"${points.length} points")
 
     val before = System.currentTimeMillis
-    val src = IterativeViewshed(
-      terrain, points,
-      maxDistance = maxDistance,
-      curvature = true,
-      operator = R2Viewshed.Or()
+    val src = terrain.viewshed(
+      points = points,
+      maxDistance = maxDistance
     )
     val after1 = System.currentTimeMillis
     logger.info(s"Craft viewshed computed in ${after1 - before} ms")
@@ -212,7 +207,7 @@ object Compute {
     val re = RasterExtent(geometry.envelope, 512, 512)
     val o = Rasterizer.Options.DEFAULT
 
-    val points = mutable.ArrayBuffer.empty[Array[Double]]
+    val points = mutable.ArrayBuffer.empty[Point6D]
     Rasterizer.foreachCellByGeometry(b, re, o)({ (col, row) =>
       val (x, y) = re.gridToMap(col, row)
       points.append(Array(x, y, alt, 0.0, -1.0, Double.NegativeInfinity))
@@ -220,11 +215,9 @@ object Compute {
 
     logger.info(s"${points.length} points")
     val before = System.currentTimeMillis
-    val src = IterativeViewshed(
-      terrain, points,
-      maxDistance = maxDistance,
-      curvature = true,
-      operator = R2Viewshed.Or()
+    val src = terrain.viewshed(
+      points = points,
+      maxDistance = maxDistance
     )
     val after1 = System.currentTimeMillis
     logger.info(s"Craft viewshed computed in ${after1 - before} ms")
