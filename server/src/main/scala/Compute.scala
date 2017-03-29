@@ -125,7 +125,7 @@ object Compute {
       if (_observer.partitions.length >= (1<<7)) _observer
       else ContextRDD(_observer.repartition((1<<7)), _observer.metadata)
     val outputId = LayerId(outputName, 0)
-    val altitude = -attributeStore.read[Double](observerId0, "altitude")
+    val altitude = attributeStore.read[Double](observerId0, "altitude")
     val touched = attributeStore
       .read[List[SpatialKey]](observerId0, "touched")
       .map({ k => SpatialKey(k.col >> magic, k.row >> magic) })
@@ -206,7 +206,6 @@ object Compute {
       if (_terrain.partitions.length >= (1<<7)) _terrain
       else ContextRDD(_terrain.repartition((1<<7)), _terrain.metadata)
     val outputId = LayerId(outputName, 0)
-    val alt = -altitude
     val b = geometry.boundary.toGeometry.get
     val re = RasterExtent(geometry.envelope, 512, 512)
     val o = Rasterizer.Options.DEFAULT
@@ -214,7 +213,7 @@ object Compute {
     val points = mutable.ArrayBuffer.empty[Point6D]
     Rasterizer.foreachCellByGeometry(b, re, o)({ (col, row) =>
       val (x, y) = re.gridToMap(col, row)
-      points.append(Array(x, y, alt, 0.0, -1.0, Double.NegativeInfinity))
+      points.append(Array(x, y, altitude, 0.0, -1.0, Double.NegativeInfinity))
     })
 
     logger.info(s"${points.length} points")
