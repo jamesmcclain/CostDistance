@@ -1,7 +1,7 @@
 import sbtassembly.PathList
 
 val generalDeps = Seq(
-  "org.apache.hadoop" % "hadoop-client" % "2.6.2" exclude("javax.servlet", "servlet-api")
+  "org.apache.hadoop" % "hadoop-client" % "2.7.3" exclude("javax.servlet", "servlet-api")
 )
 
 val extraResolvers = Seq(
@@ -11,8 +11,8 @@ val extraResolvers = Seq(
 
 lazy val commonSettings = Seq(
   organization := "com.example",
-  version := "0",
-  scalaVersion := "2.11.8",
+  version := "0.22.7",
+  scalaVersion := "2.11.11",
   test in assembly := {},
   scalacOptions ++= Seq(
     "-deprecation",
