@@ -72,7 +72,6 @@ object CostDistance {
         case "AND" => And()
         case "DEBUG" => Debug()
         case "OR" => Or()
-        case "PLUS" => Plus()
       }
 
       val points = args.drop(7)
