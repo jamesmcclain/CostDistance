@@ -11,6 +11,7 @@ import geotrellis.shapefile._
 import geotrellis.spark._
 import geotrellis.spark.costdistance._
 import geotrellis.spark.io._
+import geotrellis.spark.io.file._
 import geotrellis.spark.io.hadoop._
 import geotrellis.spark.io.index._
 import geotrellis.spark.pyramid.Pyramid
@@ -104,7 +105,7 @@ object CostDistance {
 
     //   logger.info(s"${after - before} milliseconds")
     //   logger.info(s"Writing to $catalog $writeId")
-    //   HadoopLayerWriter(catalog).write(writeId, viewshed, ZCurveKeyIndexMethod)
+    //   HadoopLayerWriter(catalog).write(writeId, viewshed, GeowaveKeyIndexMethod)
     // }
     // PYRAMID COMMAND
     /*else*/ if (operation == "pyramid") {
@@ -125,7 +126,7 @@ object CostDistance {
         val writeId = LayerId(outputLayerName, outputZoom)
 
         logger.info(s"Writing to $catalog $writeId")
-        HadoopLayerWriter(catalog).write(writeId, rdd, ZCurveKeyIndexMethod)
+        HadoopLayerWriter(catalog).write(writeId, rdd, GeowaveKeyIndexMethod)
       })
     }
     // MASK
@@ -149,7 +150,7 @@ object CostDistance {
           .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](readId)
       val masked = src.mask(polygon)
 
-      HadoopLayerWriter(catalog).write(writeId, masked, ZCurveKeyIndexMethod)
+      HadoopLayerWriter(catalog).write(writeId, masked, GeowaveKeyIndexMethod)
     }
     // COPY COMMAND
     else if (operation == "copy") {
@@ -162,7 +163,7 @@ object CostDistance {
       val src =
         HadoopLayerReader(catalog)
           .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](readId)
-      HadoopLayerWriter(catalog).write(writeId, src, ZCurveKeyIndexMethod)
+      HadoopLayerWriter(catalog).write(writeId, src, GeowaveKeyIndexMethod)
     }
     // SLOPE COMMAND
     else if (operation == "slope") {
@@ -178,7 +179,7 @@ object CostDistance {
       val slope = elevation.slope()
 
       logger.info(s"Writing to $catalog $writeId")
-      HadoopLayerWriter(catalog).write(writeId, slope, ZCurveKeyIndexMethod)
+      HadoopLayerWriter(catalog).write(writeId, slope, GeowaveKeyIndexMethod)
     }
     // COST-DISTANCE COMMAND
     else if (operation == "costdistance") {
@@ -208,7 +209,7 @@ object CostDistance {
 
       logger.info(s"${after - before} milliseconds")
       logger.info(s"Writing to $catalog $writeId")
-      HadoopLayerWriter(catalog).write(writeId, cost, ZCurveKeyIndexMethod)
+      HadoopLayerWriter(catalog).write(writeId, cost, GeowaveKeyIndexMethod)
     }
     // DUMP COMMAND
     else if (operation == "dump") {
