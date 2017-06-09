@@ -66,7 +66,7 @@ Compute the `slope` layer to use as the friction layer
 $SPARK_HOME/bin/spark-submit \
    --master 'local[*]' \
    --driver-memory 16G \
-   cdistance/target/scala-2.11/cdistance-assembly-0.jar \
+   cdistance/target/scala-2.11/cdistance-assembly-0.22.7.jar \
    'file:///tmp/hdfs-catalog' slope ned slope <z>
 ```
 where `<z>` is replaced by the appropriate zoom level.
@@ -76,7 +76,7 @@ Compute the `cost` layer:
 $SPARK_HOME/bin/spark-submit \
    --master 'local[*]' \
    --driver-memory 16G \
-   cdistance/target/scala-2.11/cdistance-assembly-0.jar \
+   cdistance/target/scala-2.11/cdistance-assembly-0.22.7.jar \
    'file:///tmp/hdfs-catalog' costdistance slope cost <z> /tmp/cities-3857/cities-3857.shp 20000
 ```
 
@@ -85,7 +85,7 @@ Compute the histogram of the `cost` layer:
 $SPARK_HOME/bin/spark-submit \
    --master 'local[*]' \
    --driver-memory 16G \
-   cdistance/target/scala-2.11/cdistance-assembly-0.jar \
+   cdistance/target/scala-2.11/cdistance-assembly-0.22.7.jar \
    'file:///tmp/hdfs-catalog' histogram cost <z>
 ```
 
@@ -94,7 +94,7 @@ Pyramid the `cost` layer into `cost-pyramid`:
 $SPARK_HOME/bin/spark-submit \
    --master 'local[*]' \
    --driver-memory 16G \
-   cdistance/target/scala-2.11/cdistance-assembly-0.jar \
+   cdistance/target/scala-2.11/cdistance-assembly-0.22.7.jar \
    'file:///tmp/hdfs-catalog' pyramid cost <z> cost-pyramid 256
 ```
 
@@ -126,7 +126,7 @@ spark-submit \
    --driver-memory 12G \
    --conf "spark.yarn.executor.memoryOverhead=6G" \
    --conf "spark.driver.extraJavaOptions=-XX:+UseConcMarkSweepGC -XX:CMSInitiatingOccupancyFraction=70 -XX:MaxHeapFreeRatio=70 -XX:+CMSClassUnloadingEnabled -XX:OnOutOfMemoryError='kill -9 %p' -Dlog4j.configuration=file:///home/hadoop/log4j.properties" \
-   cdistance-assembly-0.jar \
+   cdistance-assembly-0.22.7.jar \
    'hdfs:/catalog' costdistance slope cost <z> /tmp/cities-3857/cities-3857.shp 20000
 ```
 
@@ -151,3 +151,14 @@ After that, type
 spark-submit server-assembly-0.jar
 ```
 or similar.
+
+# Other Commands #
+
+The "copy" command copies a layer:
+```bash
+$SPARK_HOME/bin/spark-submit \
+   --master 'local[*]' \
+   --driver-memory 16G \
+   cdistance/target/scala-2.11/cdistance-assembly-0.22.7.jar \
+   'file:///tmp/hdfs-catalog' copy ned ned-copy 9
+```

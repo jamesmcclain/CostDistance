@@ -126,6 +126,19 @@ object CostDistance {
         HadoopLayerWriter(catalog).write(writeId, rdd, ZCurveKeyIndexMethod)
       })
     }
+    // COPY COMMAND
+    else if (operation == "copy") {
+      val zoom = args(4).toInt
+      val readId = LayerId(args(2), zoom)
+      val writeId = LayerId(args(3), zoom)
+
+      logger.debug(s"Copy: catalog=$catalog input=$readId output=$writeId")
+
+      val src =
+        HadoopLayerReader(catalog)
+          .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](readId)
+      HadoopLayerWriter(catalog).write(writeId, src, ZCurveKeyIndexMethod)
+    }
     // SLOPE COMMAND
     else if (operation == "slope") {
       val zoom = args(4).toInt
