@@ -1,6 +1,7 @@
 package com.example.cdistance
 
 import geotrellis.geotools._
+import geotrellis.proj4.{ LatLng, WebMercator }
 import geotrellis.proj4.WebMercator
 import geotrellis.raster._
 import geotrellis.raster.costdistance._
@@ -16,6 +17,7 @@ import geotrellis.spark.pyramid.Pyramid
 import geotrellis.spark.tiling.ZoomedLayoutScheme
 import geotrellis.spark.viewshed._
 import geotrellis.vector._
+import geotrellis.vector.io._
 
 import org.apache.log4j.Logger
 import org.apache.spark.rdd.RDD
@@ -125,6 +127,29 @@ object CostDistance {
         logger.info(s"Writing to $catalog $writeId")
         HadoopLayerWriter(catalog).write(writeId, rdd, ZCurveKeyIndexMethod)
       })
+    }
+    // MASK
+    else if (operation == "mask") {
+      val zoom = args(4).toInt
+      val readId = LayerId(args(2), zoom)
+      val writeId = LayerId(args(3), zoom)
+      val geojsonUri = args(5)
+      val polygon =
+        scala.io.Source.fromFile(geojsonUri, "UTF-8")
+          .getLines
+          .mkString
+          .extractGeometries[MultiPolygon]
+          .head
+          .reproject(LatLng, WebMercator)
+
+      logger.debug(s"Mask: catalog=$catalog input=$readId output=$writeId polygon=$geojsonUri")
+
+      val src =
+        HadoopLayerReader(catalog)
+          .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](readId)
+      val masked = src.mask(polygon)
+
+      HadoopLayerWriter(catalog).write(writeId, masked, ZCurveKeyIndexMethod)
     }
     // COPY COMMAND
     else if (operation == "copy") {

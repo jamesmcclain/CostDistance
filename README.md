@@ -162,3 +162,13 @@ $SPARK_HOME/bin/spark-submit \
    cdistance/target/scala-2.11/cdistance-assembly-0.22.7.jar \
    'file:///tmp/hdfs-catalog' copy ned ned-copy 9
 ```
+
+The "mask" command masks against a GeoJSON polygon.
+The layer is assumed to be in the WebMercator projection.
+```bash
+$SPARK_HOME/bin/spark-submit \
+   --master 'local[*]' \
+   --driver-memory 16G \
+   cdistance/target/scala-2.11/cdistance-assembly-0.22.7.jar \
+   'file:///tmp/hdfs-catalog' mask ned ned-masked 9 ./geojson/USA.geo.json
+```
