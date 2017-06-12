@@ -145,9 +145,7 @@ object CostDistance {
 
       logger.debug(s"Mask: catalog=$catalog input=$readId output=$writeId polygon=$geojsonUri")
 
-      val src =
-        HadoopLayerReader(catalog)
-          .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](readId)
+      val src = HadoopLayerReader(catalog).read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](readId)
       val masked = src.mask(polygon)
 
       HadoopLayerWriter(catalog).write(writeId, masked, GeowaveKeyIndexMethod)
@@ -160,10 +158,43 @@ object CostDistance {
 
       logger.debug(s"Copy: catalog=$catalog input=$readId output=$writeId")
 
-      val src =
-        HadoopLayerReader(catalog)
-          .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](readId)
+      val src = HadoopLayerReader(catalog).read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](readId)
+
       HadoopLayerWriter(catalog).write(writeId, src, GeowaveKeyIndexMethod)
+    }
+    // COPY TO SPATIO-TEMPORAL LAYER
+    else if (operation == "copy+") {
+      val zoom = args(4).toInt
+      val readId = LayerId(args(2), zoom)
+      val writeId = LayerId(args(3), zoom)
+
+      logger.debug(s"Copy+: catalog=$catalog input=$readId output=$writeId")
+
+      val src = HadoopLayerReader(catalog).read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](readId)
+      val TileLayerMetadata(cellType, layout, extent, crs, KeyBounds(minKey, maxKey)) = src.metadata
+      val metadata = TileLayerMetadata(cellType, layout, extent, crs,
+        KeyBounds(SpaceTimeKey(minKey.col, minKey.row, 42), SpaceTimeKey(maxKey.col, maxKey.row, 107)))
+      val rdd = src.map({ case (SpatialKey(col, row), tile) => (SpaceTimeKey(col, row, 33), tile) })
+      val dst = ContextRDD(rdd, metadata)
+
+      HadoopLayerWriter(catalog).write(writeId, dst, GeowaveKeyIndexMethod(10))
+    }
+    // COPY FROM SPATIO-TEMPORAL LAYER
+    else if (operation == "copy-") {
+      val zoom = args(4).toInt
+      val readId = LayerId(args(2), zoom)
+      val writeId = LayerId(args(3), zoom)
+
+      logger.debug(s"Copy-: catalog=$catalog input=$readId output=$writeId")
+
+      val src = HadoopLayerReader(catalog).read[SpaceTimeKey, Tile, TileLayerMetadata[SpaceTimeKey]](readId)
+      val TileLayerMetadata(cellType, layout, extent, crs, KeyBounds(minKey, maxKey)) = src.metadata
+      val metadata = TileLayerMetadata(cellType, layout, extent, crs,
+        KeyBounds(SpatialKey(minKey.col, minKey.row), SpatialKey(maxKey.col, maxKey.row)))
+      val rdd = src.map({ case (SpaceTimeKey(col, row, _), tile) => (SpatialKey(col, row), tile) })
+      val dst = ContextRDD(rdd, metadata)
+
+      HadoopLayerWriter(catalog).write(writeId, dst, GeowaveKeyIndexMethod)
     }
     // SLOPE COMMAND
     else if (operation == "slope") {
