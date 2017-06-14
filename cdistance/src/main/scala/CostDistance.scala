@@ -71,9 +71,9 @@ object CostDistance {
       val writeId = LayerId(args(3), zoom)
       val maxDistance = args(5).toDouble
       val op = args(6) match {
-        case "AND" => And()
-        case "DEBUG" => Debug()
-        case "OR" => Or()
+        case "AND" => And
+        case "DEBUG" => Debug
+        case "OR" => Or
       }
 
       val points = args.drop(7)
@@ -82,10 +82,10 @@ object CostDistance {
         .map({ case _ar: Array[String] if (_ar.length == 6) =>
           val ar = _ar.map(_.toDouble)
           if (ar(5) == 0) ar(5) = Double.NegativeInfinity
-          ar
-        })
+          ar })
+        .map({ case Array(a, b, c, d, e, f) => IterativeViewshed.Point6D(a, b, c, d, e, f) })
 
-      logger.debug(s"Viewshed: catalog=$catalog input=$readId output=$writeId maxDistance=$maxDistance op=$op points=${points.map(_.toList)}")
+      logger.debug(s"Viewshed: catalog=$catalog input=$readId output=$writeId maxDistance=$maxDistance op=$op points=${points}")
 
       // Read elevation layer
       val elevation =
