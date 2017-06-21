@@ -6,7 +6,7 @@ import geotrellis.proj4.WebMercator
 import geotrellis.raster._
 import geotrellis.raster.costdistance._
 import geotrellis.raster.io._
-import geotrellis.raster.viewshed.R2Viewshed._
+// import geotrellis.raster.viewshed.R2Viewshed._
 import geotrellis.shapefile._
 import geotrellis.spark._
 import geotrellis.spark.costdistance._
@@ -15,7 +15,7 @@ import geotrellis.spark.io.hadoop._
 import geotrellis.spark.io.index._
 import geotrellis.spark.pyramid.Pyramid
 import geotrellis.spark.tiling.ZoomedLayoutScheme
-import geotrellis.spark.viewshed._
+// import geotrellis.spark.viewshed._
 import geotrellis.vector._
 import geotrellis.vector.io._
 
@@ -64,50 +64,51 @@ object CostDistance {
     val sparkContext = new SparkContext(sparkConf)
     implicit val sc = sparkContext
 
-    // VIEWSHED COMMAND
-    if (operation == "viewshed") {
-      val zoom = args(4).toInt
-      val readId = LayerId(args(2), zoom)
-      val writeId = LayerId(args(3), zoom)
-      val maxDistance = args(5).toDouble
-      val op = args(6) match {
-        case "AND" => And
-        case "DEBUG" => Debug
-        case "OR" => Or
-      }
+    // // VIEWSHED COMMAND
+    // if (operation == "viewshed") {
+    //   val zoom = args(4).toInt
+    //   val readId = LayerId(args(2), zoom)
+    //   val writeId = LayerId(args(3), zoom)
+    //   val maxDistance = args(5).toDouble
+    //   val op = args(6) match {
+    //     case "AND" => And
+    //     case "DEBUG" => Debug
+    //     case "OR" => Or
+    //   }
 
-      val points = args.drop(7)
-        .grouped(6)
-        .toList
-        .map({ case _ar: Array[String] if (_ar.length == 6) =>
-          val ar = _ar.map(_.toDouble)
-          if (ar(5) == 0) ar(5) = Double.NegativeInfinity
-          ar })
-        .map({ case Array(a, b, c, d, e, f) => IterativeViewshed.Point6D(a, b, c, d, e, f) })
+    //   val points = args.drop(7)
+    //     .grouped(6)
+    //     .toList
+    //     .map({ case _ar: Array[String] if (_ar.length == 6) =>
+    //       val ar = _ar.map(_.toDouble)
+    //       if (ar(5) == 0) ar(5) = Double.NegativeInfinity
+    //       ar })
+    //     .map({ case Array(a, b, c, d, e, f) => IterativeViewshed.Point6D(a, b, c, d, e, f) })
 
-      logger.debug(s"Viewshed: catalog=$catalog input=$readId output=$writeId maxDistance=$maxDistance op=$op points=${points}")
+    //   logger.debug(s"Viewshed: catalog=$catalog input=$readId output=$writeId maxDistance=$maxDistance op=$op points=${points}")
 
-      // Read elevation layer
-      val elevation =
-        HadoopLayerReader(catalog)
-          .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](readId)
+    //   // Read elevation layer
+    //   val elevation =
+    //     HadoopLayerReader(catalog)
+    //       .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](readId)
 
-      // Compute viewshed layer
-      val before = System.currentTimeMillis
-      val viewshed = IterativeViewshed(
-        elevation, points,
-        maxDistance = maxDistance,
-        curvature = true,
-        operator = op
-      )
-      val after = System.currentTimeMillis
+    //   // Compute viewshed layer
+    //   val before = System.currentTimeMillis
+    //   val viewshed = IterativeViewshed(
+    //     elevation, points,
+    //     maxDistance = maxDistance,
+    //     curvature = true,
+    //     operator = op
+    //   )
+    //   val after = System.currentTimeMillis
 
-      logger.info(s"${after - before} milliseconds")
-      logger.info(s"Writing to $catalog $writeId")
-      HadoopLayerWriter(catalog).write(writeId, viewshed, ZCurveKeyIndexMethod)
-    }
-    // PYRAMID COMMAND
-    else if (operation == "pyramid") {
+    //   logger.info(s"${after - before} milliseconds")
+    //   logger.info(s"Writing to $catalog $writeId")
+    //   HadoopLayerWriter(catalog).write(writeId, viewshed, ZCurveKeyIndexMethod)
+    // }
+    // // PYRAMID COMMAND
+    // else
+      if (operation == "pyramid") {
       val inputZoom = args(3).toInt
       val outputLayerName = args(4)
       val size = args(5).toInt
