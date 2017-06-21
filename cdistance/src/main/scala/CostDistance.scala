@@ -151,7 +151,7 @@ object CostDistance {
           .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](readId)
       val masked = src.mask(polygon)
 
-      HadoopLayerWriter("file:///tmp/hdfs-catalog").write(writeId, masked, ZCurveKeyIndexMethod)
+      FileLayerWriter(catalog).write(writeId, masked, ZCurveKeyIndexMethod)
     }
     // COPY COMMAND
     else if (operation == "copy") {
@@ -217,7 +217,7 @@ object CostDistance {
       val layerName = args(2)
       val id = LayerId(layerName, args(3).toInt)
       val layer =
-        HadoopLayerReader(catalog)
+        FileLayerReader(catalog)
           .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](id)
 
       logger.debug(s"Dump: catalog=$catalog input=$id output=/tmp/tif/${layerName}-*.tif")
