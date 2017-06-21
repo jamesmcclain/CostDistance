@@ -1,7 +1,8 @@
 {
     "backend": {
-        "type": "file",
-        "path": "/tmp/file-catalog/"
+        "type": "accumulo",
+        "path": "moop",
+	"profile": "accumulo-name"
     },
     "reprojectMethod": "buffered",
     "pyramid": false,

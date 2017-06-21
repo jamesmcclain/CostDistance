@@ -1,3 +1,11 @@
 {
-    "backend-profiles": []
+    "backend-profiles": [{
+	"name": "accumulo-name",
+	"type": "accumulo",
+	"zookeepers": "leader",
+	"instance": "instance",
+	"user": "root",
+	"password": "password",
+	"strategy": "socket"
+    }]
 }

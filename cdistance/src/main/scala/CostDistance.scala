@@ -11,9 +11,10 @@ import geotrellis.shapefile._
 import geotrellis.spark._
 import geotrellis.spark.costdistance._
 import geotrellis.spark.io._
+import geotrellis.spark.io.accumulo._
+import geotrellis.spark.io.accumulo.AccumuloInstance
 import geotrellis.spark.io.hadoop._
 import geotrellis.spark.io.index._
-import geotrellis.spark.io.s3._
 import geotrellis.spark.pyramid.Pyramid
 import geotrellis.spark.tiling.ZoomedLayoutScheme
 // import geotrellis.spark.viewshed._
@@ -25,6 +26,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.{SparkConf, SparkContext}
 import org.geotools.gce.geotiff._
 import org.opengis.parameter.GeneralParameterValue
+
+import org.apache.accumulo.core.client.security.tokens.PasswordToken
 
 import com.vividsolutions.jts.{ geom => jts }
 
@@ -146,9 +149,10 @@ object CostDistance {
 
       logger.debug(s"Mask: catalog=$catalog input=$readId output=$writeId polygon=$geojsonUri")
 
-      val as = S3AttributeStore("azavea-datahub", "catalog")
+      implicit val instance = AccumuloInstance("instance", "leader", "root", new PasswordToken("password"))
+      val as = AccumuloAttributeStore(instance)
       val src =
-        S3LayerReader(as)
+        AccumuloLayerReader(as)
           .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](readId)
       val masked = src.mask(polygon)
 
