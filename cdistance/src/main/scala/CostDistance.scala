@@ -11,9 +11,9 @@ import geotrellis.shapefile._
 import geotrellis.spark._
 import geotrellis.spark.costdistance._
 import geotrellis.spark.io._
-import geotrellis.spark.io.file._
 import geotrellis.spark.io.hadoop._
 import geotrellis.spark.io.index._
+import geotrellis.spark.io.s3._
 import geotrellis.spark.pyramid.Pyramid
 import geotrellis.spark.tiling.ZoomedLayoutScheme
 // import geotrellis.spark.viewshed._
@@ -146,12 +146,13 @@ object CostDistance {
 
       logger.debug(s"Mask: catalog=$catalog input=$readId output=$writeId polygon=$geojsonUri")
 
+      val as = S3AttributeStore("azavea-datahub", "catalog")
       val src =
-        FileLayerReader(catalog)
+        S3LayerReader(as)
           .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](readId)
       val masked = src.mask(polygon)
 
-      FileLayerWriter(catalog).write(writeId, masked, ZCurveKeyIndexMethod)
+      HadoopLayerWriter(catalog).write(writeId, masked, ZCurveKeyIndexMethod)
     }
     // COPY COMMAND
     else if (operation == "copy") {
@@ -217,7 +218,7 @@ object CostDistance {
       val layerName = args(2)
       val id = LayerId(layerName, args(3).toInt)
       val layer =
-        FileLayerReader(catalog)
+        HadoopLayerReader(catalog)
           .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](id)
 
       logger.debug(s"Dump: catalog=$catalog input=$id output=/tmp/tif/${layerName}-*.tif")

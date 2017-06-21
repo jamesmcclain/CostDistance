@@ -2,6 +2,7 @@ name := "cdistance"
 libraryDependencies ++= Seq(
   "org.locationtech.geotrellis" %% "geotrellis-geotools"  % "1.2.0-SNAPSHOT",
   "org.locationtech.geotrellis" %% "geotrellis-raster"    % "1.2.0-SNAPSHOT",
+  "org.locationtech.geotrellis" %% "geotrellis-s3"        % "1.2.0-SNAPSHOT",
   "org.locationtech.geotrellis" %% "geotrellis-shapefile" % "1.2.0-SNAPSHOT",
   "org.locationtech.geotrellis" %% "geotrellis-spark"     % "1.2.0-SNAPSHOT",
   "org.locationtech.geotrellis" %% "geotrellis-vector"    % "1.2.0-SNAPSHOT",
