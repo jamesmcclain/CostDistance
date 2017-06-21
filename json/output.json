@@ -1,7 +1,7 @@
 {
     "backend": {
-        "type": "hadoop",
-        "path": "file:///tmp/hdfs-catalog/"
+        "type": "file",
+        "path": "/tmp/file-catalog/"
     },
     "reprojectMethod": "buffered",
     "pyramid": false,

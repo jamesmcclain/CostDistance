@@ -11,6 +11,7 @@ import geotrellis.shapefile._
 import geotrellis.spark._
 import geotrellis.spark.costdistance._
 import geotrellis.spark.io._
+import geotrellis.spark.io.file._
 import geotrellis.spark.io.hadoop._
 import geotrellis.spark.io.index._
 import geotrellis.spark.pyramid.Pyramid
@@ -146,11 +147,11 @@ object CostDistance {
       logger.debug(s"Mask: catalog=$catalog input=$readId output=$writeId polygon=$geojsonUri")
 
       val src =
-        HadoopLayerReader(catalog)
+        FileLayerReader(catalog)
           .read[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](readId)
       val masked = src.mask(polygon)
 
-      HadoopLayerWriter(catalog).write(writeId, masked, ZCurveKeyIndexMethod)
+      HadoopLayerWriter("file:///tmp/hdfs-catalog").write(writeId, masked, ZCurveKeyIndexMethod)
     }
     // COPY COMMAND
     else if (operation == "copy") {
